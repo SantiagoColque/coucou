@@ -68,10 +68,13 @@ enum DeckProtocolTests {
         s.dictation = .idle
         s.recordingAvailable = true
         var t = DeckLayout.tiles(s, selected: 1)
-        check("8 session keys at most", t[.key(7)], .session(session("p7"), selected: false))
+        check("5 session keys, the top row", t[.key(4)], .session(session("p4"), selected: false))
+        check("key 5 is the meeting, not a session", t[.key(5)], .meeting(nil, access: .notAsked))
         check("selected session is marked", t[.key(1)], .session(session("p1"), selected: true))
         check("key 8 dictation", t[.key(8)], .dictation(.idle))
-        check("key 9 record", t[.key(9)], .record(on: false))
+        check("key 9 record", t[.key(9)], .record(on: false, ready: true))
+        check("no mic key without a microphone", t[.key(6)], .blank)
+        check("panel 4: Mochi with the page dots", t[.strip(3)], .mochi(state: "idle", clock: "", page: 0, pages: DeckPage.allCases.count))
         check("panel 2 shows the selected session", t[.strip(1)], .focus(session("p1")))
         s.recordingAvailable = false
         check("no record key without the Notetaker", DeckLayout.tiles(s, selected: 0)[.key(9)], .blank)
@@ -83,7 +86,8 @@ enum DeckProtocolTests {
         check("approval: always on key 6", t[.key(6)], .always)
         check("approval: deny on key 9, far from allow", t[.key(9)], .deny)
         check("approval: key 8 opens the terminal", t[.key(8)], .openTerminal)
-        check("approval: strip shows the command", t[.strip(2)], .request(title: "coucou · Bash", body: "rm -rf build", part: 2))
+        check("approval: title on panel 1", t[.strip(0)], .request(title: "coucou · Bash", lines: ["rm -rf build"], part: 0))
+        check("approval: a short command stays on panel 1", t[.strip(2)], .request(title: nil, lines: [""], part: 2))
         check("approval: sessions stay on the top row", t[.key(4)], .session(session("p4"), selected: false))
         s.approval!.allowsAlways = false
         check("no Always for Codex", DeckLayout.tiles(s, selected: 0)[.key(6)], .blank)
@@ -91,7 +95,7 @@ enum DeckProtocolTests {
         t = DeckLayout.tiles(s, selected: 0)
         check("plan: no Allow key", t[.key(5)], .blank)
         check("plan: no Deny key", t[.key(9)], .blank)
-        check("plan: strip says answer on the Mac", t[.strip(0)], .request(title: "coucou · Bash", body: nil, part: 0))
+        check("plan: strip says answer on the Mac", t[.strip(0)], .request(title: "coucou · Bash", lines: nil, part: 0))
 
         print("DeckLayout.action (approval)")
         s.approval!.isPlan = false
@@ -125,6 +129,17 @@ enum DeckProtocolTests {
         check("five-line command: no Allow", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: true), nil)
         s.approval!.command = "a\nb\nc\nd"
         check("four-line command: Allow", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: true), .decide(approvalId, "allow"))
+        s.approval!.command = String(repeating: "y", count: 100) + "\nb\nc\nd"
+        check("three lines that wrap to five: no Allow", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: true), nil)
+        let wide = String((0..<DeckLayout.lineColumns).map { Character(UnicodeScalar(65 + $0 % 26)!) })
+        s.approval!.command = wide
+        let panels = (0..<4).map { DeckLayout.tiles(s, selected: 0)[.strip($0)] }
+        let shown = panels.map { tile -> String in
+            if case .request(_, let lines?, _) = tile { return lines.joined() } else { return "?" }
+        }.joined()
+        check("a full line is split across the panels, every character shown once", shown, wide)
+        check("a command wraps at any character", DeckLayout.wrap(String(repeating: "x", count: DeckLayout.lineColumns + 3), words: false).map(\.count), [DeckLayout.lineColumns, 3])
+        check("a question wraps between words", DeckLayout.wrap(String(repeating: "ab ", count: 30), words: true).first?.hasSuffix(" "), true)
         s.approval = nil
 
         print("DeckLayout (question)")
@@ -155,13 +170,64 @@ enum DeckProtocolTests {
         check("dictation off: key does nothing", DeckLayout.action(for: .keyDown(8), s, selected: 0, armed: false), nil)
         check("knob 2 selects", DeckLayout.action(for: .knobTurn(knob: 1, steps: -1), s, selected: 0, armed: false), .select(delta: -1))
         check("knob 2 press jumps to the selected session", DeckLayout.action(for: .knobPress(1), s, selected: 4, armed: false), .jump(sessionId: "p4"))
-        check("selection is clamped to the session keys", DeckLayout.action(for: .knobPress(1), s, selected: 99, armed: false), .jump(sessionId: "p7"))
+        check("selection reaches sessions past the keys", DeckLayout.action(for: .knobPress(1), s, selected: 99, armed: false), .jump(sessionId: "p9"))
+        check("a session past the keys is shown on panel 2", DeckLayout.tiles(s, selected: 7)[.strip(1)], .focus(session("p7")))
         check("knob 3 volume", DeckLayout.action(for: .knobTurn(knob: 2, steps: 1), s, selected: 0, armed: false), .volume(delta: 4))
         check("knob 3 press play/pause", DeckLayout.action(for: .knobPress(2), s, selected: 0, armed: false), .musicPlayPause)
         check("music panel tap: next track", DeckLayout.action(for: .stripTap(2), s, selected: 0, armed: false), .musicNext)
         check("knob 1 brightness", DeckLayout.action(for: .knobTurn(knob: 0, steps: -1), s, selected: 0, armed: false), .brightness(delta: -10))
         check("0x38 is a left-to-right swipe", DeckProtocol.parse(Array("ACK".utf8) + [0, 0, 0x4f, 0x4b, 0, 0, 0x38, 0]), .swipe(left: false))
-        check("swipes are ignored", DeckLayout.action(for: .swipe(left: true), s, selected: 0, armed: false), nil)
+        check("swipe right to left: next page", DeckLayout.action(for: .swipe(left: true), s, selected: 0, armed: false), .page(delta: 1))
+        check("swipe left to right: previous page", DeckLayout.action(for: .swipe(left: false), s, selected: 0, armed: false), .page(delta: -1))
+        check("knob 4 turn does nothing without a timer", DeckLayout.action(for: .knobTurn(knob: 3, steps: 1), s, selected: 0, armed: false), nil)
+        check("meeting key asks for the calendar", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: false), .askCalendar)
+        s.calendar = .granted
+        check("meeting without a link does nothing", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: false), nil)
+        s.meeting = .init(title: "Daily", minutes: 3, start: "10:00", hasLink: true)
+        check("meeting key joins", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: false), .openMeeting)
+        check("mic key without a microphone does nothing", DeckLayout.action(for: .keyDown(6), s, selected: 0, armed: false), nil)
+        s.micMuted = false
+        s.output = "MacBook Pro Speakers"
+        check("mic key toggles", DeckLayout.action(for: .keyDown(6), s, selected: 0, armed: false), .toggleMic)
+        check("output key switches", DeckLayout.action(for: .keyDown(7), s, selected: 0, armed: false), .nextOutput)
+        check("output key shows the device", DeckLayout.tiles(s, selected: 0)[.key(7)], .output("MacBook Pro Speakers"))
+        let request = UUID()
+        s.approval = .init(id: request, tool: "Bash", command: "ls", project: "", allowsAlways: true, isPlan: false)
+        check("no page change during a request", DeckLayout.action(for: .swipe(left: true), s, selected: 0, armed: true), nil)
+        check("request: key 7 is empty, not the output", DeckLayout.tiles(s, selected: 0)[.key(7)], .blank)
+        s.approval = nil
+
+        print("DeckLayout (focus page)")
+        s.page = .focus
+        t = DeckLayout.tiles(s, selected: 0)
+        check("focus 25 on key 1", t[.key(0)], .focusPreset(minutes: 25, isBreak: false, active: false))
+        check("break on key 3", t[.key(2)], .focusPreset(minutes: 5, isBreak: true, active: false))
+        check("capture on key 4", t[.key(3)], .capture)
+        check("lock on key 5", t[.key(4)], .lock)
+        check("bottom row stays", t[.key(6)], .mic(muted: false))
+        check("no timer: CPU on panel 1", t[.strip(0)], .vital(.cpu, value: nil, charging: false))
+        check("panel 4 dots on page 2", t[.strip(3)], .mochi(state: "idle", clock: "", page: 1, pages: DeckPage.allCases.count))
+        check("preset starts a timer", DeckLayout.action(for: .keyDown(1), s, selected: 0, armed: false), .startTimer(minutes: 50, isBreak: false))
+        check("capture key", DeckLayout.action(for: .keyDown(3), s, selected: 0, armed: false), .capture)
+        check("lock key", DeckLayout.action(for: .keyDown(4), s, selected: 0, armed: false), .lockScreen)
+        check("strip tap does nothing on the focus page", DeckLayout.action(for: .stripTap(0), s, selected: 0, armed: false), nil)
+        s.timer = .init(remaining: 600, total: 1500, isBreak: false)
+        t = DeckLayout.tiles(s, selected: 0)
+        check("running preset is marked", t[.key(0)], .focusPreset(minutes: 25, isBreak: false, active: true))
+        check("timer across panels 1-3", t[.strip(2)], .timer(s.timer!, part: 2))
+        check("running preset stops", DeckLayout.action(for: .keyDown(0), s, selected: 0, armed: false), .stopTimer)
+        check("knob 4 adjusts the timer", DeckLayout.action(for: .knobTurn(knob: 3, steps: -1), s, selected: 0, armed: false), .adjustTimer(minutes: -1))
+        check("knob 4 press stops the timer", DeckLayout.action(for: .knobPress(3), s, selected: 0, armed: false), .stopTimer)
+        s.approval = .init(id: request, tool: "Bash", command: "ls", project: "", allowsAlways: true, isPlan: false)
+        check("request on the focus page: sessions on the top row", DeckLayout.tiles(s, selected: 0)[.key(0)], .session(session("p0"), selected: true))
+        check("request on the focus page: session keys jump", DeckLayout.action(for: .keyDown(1), s, selected: 0, armed: false), .jump(sessionId: "p1"))
+        s.approval = nil
+        s.timer = nil
+        s.page = .agents
+        s.meeting = nil
+        s.micMuted = nil
+        s.output = nil
+        s.calendar = .notAsked
         s.sessions = []
         check("no sessions: session key does nothing", DeckLayout.action(for: .keyDown(0), s, selected: 0, armed: false), nil)
         check("no sessions: knob 2 press does nothing", DeckLayout.action(for: .knobPress(1), s, selected: 0, armed: false), nil)

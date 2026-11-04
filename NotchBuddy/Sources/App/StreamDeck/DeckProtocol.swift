@@ -26,6 +26,9 @@ enum DeckProtocol {
     static let stripCount = 4
     static let keySize = (width: 112, height: 112)
     static let stripSize = (width: 176, height: 112)
+    /// The dark gap between two panels of the strip, in pixels. Estimated from a photo of an SS552:
+    /// the panels sit 200 px apart. Anything drawn across panels skips it, so nothing hides in it.
+    static let stripGap = 24
 
     // MARK: Screens
 

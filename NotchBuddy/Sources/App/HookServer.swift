@@ -246,7 +246,8 @@ final class HookServer: @unchecked Sendable {
             SessionLine(id: line.session, title: line.value.title,
                         state: waiting[line.session] ?? line.value.state,
                         lastStep: Self.readableStep(line.value.steps.last ?? ""),
-                        isShown: line.session == shown)
+                        isShown: line.session == shown,
+                        project: sessions.display(pill: pill, session: line.value.rawSession)?.projectName)
         }
         if state.tasks[index].sessionLines != lines { state.tasks[index].sessionLines = lines }
     }
@@ -3613,6 +3614,13 @@ def term_program(env):
     term = env.get('TERM_PROGRAM', '')
     if not term and not env.get('__CFBundleIdentifier') and env.get('CLAUDE_CODE_ENTRYPOINT') == 'claude-vscode':
         return 'vscode'
+    if not term and not env.get('__CFBundleIdentifier'):
+        # Claude Code's background sessions (claude daemon, CLAUDE_CODE_SESSION_KIND=bg) run the
+        # hook without TERM_PROGRAM or the app's bundle ID; the terminal's own variables remain.
+        for var, name in (('GHOSTTY_RESOURCES_DIR', 'ghostty'), ('ITERM_SESSION_ID', 'iTerm.app'),
+                          ('KITTY_WINDOW_ID', 'kitty'), ('WEZTERM_PANE', 'WezTerm')):
+            if env.get(var):
+                return name
     return term
 
 def main():
@@ -3988,6 +3996,13 @@ def term_program(env):
     term = env.get('TERM_PROGRAM', '')
     if not term and not env.get('__CFBundleIdentifier') and env.get('CLAUDE_CODE_ENTRYPOINT') == 'claude-vscode':
         return 'vscode'
+    if not term and not env.get('__CFBundleIdentifier'):
+        # Claude Code's background sessions (claude daemon, CLAUDE_CODE_SESSION_KIND=bg) run the
+        # hook without TERM_PROGRAM or the app's bundle ID; the terminal's own variables remain.
+        for var, name in (('GHOSTTY_RESOURCES_DIR', 'ghostty'), ('ITERM_SESSION_ID', 'iTerm.app'),
+                          ('KITTY_WINDOW_ID', 'kitty'), ('WEZTERM_PANE', 'WezTerm')):
+            if env.get(var):
+                return name
     return term
 
 def main():

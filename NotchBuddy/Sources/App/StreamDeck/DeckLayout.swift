@@ -7,11 +7,17 @@ import Foundation
 // tests/DeckProtocolTests.swift.
 //
 // Layout (10 keys, 5 per row, a 4-panel touch strip with a knob under each panel):
-//   normal    keys 0-7 live agent sessions (press: jump to its terminal), key 8 dictation (hold), key 9 record a call
-//             strip: plan usage · selected session · music · Mochi + clock
+//   normal    pages, changed by swiping the strip; the bottom row is the same on every page:
+//             key 5 next meeting, key 6 the Mac's microphone, key 7 audio output, key 8 dictation (hold), key 9 record a call.
+//             Panel 4 is Mochi, the clock and the page dots on every page.
+//     agents  keys 0-4 live agent sessions (press: jump to its terminal)
+//             strip: weekly plan usage · selected session · music
+//     focus   keys 0-4 focus 25 · focus 50 · break 5 · screen capture · lock the screen
+//             strip: the timer across panels 1-3 while it runs, otherwise CPU · memory · battery
 //   approval  keys 0-4 sessions, key 5 Allow, key 6 Always, key 8 open terminal, key 9 Deny; the strip shows the command.
 //             A command too long to read whole on the strip gets no Allow and no Always (as on the Android phone).
 //   question  keys 0-7 the options, key 8 answer in the terminal; the strip shows the question
+//   A request brings the deck back to the agents page.
 //
 // A request (approval or question) ignores its keys for `armDelay` after it appears, so a key already
 // on its way down when the request lands can never answer it.
@@ -56,18 +62,61 @@ struct DeckSnapshot: Equatable, Sendable {
 
     enum Dictation: Equatable, Sendable { case off, idle, listening, thinking }
 
+    struct Meeting: Equatable, Sendable {
+        var title: String
+        /// Minutes until it starts; 0 or less once it has started.
+        var minutes: Int
+        /// "15:30", shown when it is more than an hour away.
+        var start: String
+        var hasLink: Bool
+    }
+
+    enum CalendarAccess: Equatable, Sendable { case notAsked, denied, granted }
+
+    struct FocusTimer: Equatable, Sendable {
+        var remaining: Int   // seconds
+        var total: Int       // seconds
+        var isBreak: Bool
+    }
+
+    struct Vitals: Equatable, Sendable {
+        var cpu: Int         // percent
+        var memory: Int      // percent
+        var battery: Int?    // percent, nil on a Mac without one
+        var charging: Bool
+    }
+
     var sessions: [Session] = []
     var approval: Approval?
     var question: Question?
-    var planFiveHour: Double?
+    /// The weekly limit only: the Max plan has no limit per session.
     var planWeek: Double?
+    var planWeekResets: Date?
     var music: Music?
     var dictation: Dictation = .off
     var recordingAvailable = false
     var recording = false
+    /// The transcription model the Notetaker needs is downloaded.
+    var recordingReady = true
+    var page: DeckPage = .agents
+    var meeting: Meeting?
+    var calendar: CalendarAccess = .notAsked
+    /// nil: no microphone.
+    var micMuted: Bool?
+    /// The audio output's name; nil when there is none.
+    var output: String?
+    var timer: FocusTimer?
+    var vitals: Vitals?
     var overallState = "idle"
     var clock = ""
 }
+
+/// The deck's pages, in swipe order.
+enum DeckPage: Int, CaseIterable, Equatable, Sendable {
+    case agents, focus
+}
+
+enum DeckVital: Equatable, Sendable { case cpu, memory, battery }
 
 enum DeckTile: Equatable, Sendable {
     case blank
@@ -77,14 +126,23 @@ enum DeckTile: Equatable, Sendable {
     case option(String)
     case openTerminal
     case dictation(DeckSnapshot.Dictation)
-    case record(on: Bool)
+    case record(on: Bool, ready: Bool)
+    case meeting(DeckSnapshot.Meeting?, access: DeckSnapshot.CalendarAccess)
+    case mic(muted: Bool)
+    case output(String)
+    case focusPreset(minutes: Int, isBreak: Bool, active: Bool)
+    case capture, lock
     // strip panels
-    /// One quarter (`part` 0-3) of a request drawn across the whole strip. nil body: "answer it on the Mac".
-    case request(title: String, body: String?, part: Int)
-    case usage(fiveHour: Double?, week: Double?)
+    /// One panel (`part` 0-3) of a request drawn across the strip: the title on panel 0, then this
+    /// panel's columns of each text line (see `requestLines`). nil lines: "answer it on the Mac".
+    case request(title: String?, lines: [String]?, part: Int)
+    case usage(week: Double?, resets: Date?)
     case focus(DeckSnapshot.Session?)
     case music(DeckSnapshot.Music?)
-    case mochi(state: String, clock: String)
+    case mochi(state: String, clock: String, page: Int, pages: Int)
+    /// One of panels 0-2 (`part`) of the focus timer drawn across them.
+    case timer(DeckSnapshot.FocusTimer, part: Int)
+    case vital(DeckVital, value: Int?, charging: Bool)
 }
 
 enum DeckAction: Equatable, Sendable {
@@ -101,21 +159,69 @@ enum DeckAction: Equatable, Sendable {
     case musicPlayPause, musicNext
     case volume(delta: Int)
     case openCoucou
+    case page(delta: Int)
+    case openMeeting, askCalendar
+    case toggleMic, nextOutput
+    case startTimer(minutes: Int, isBreak: Bool)
+    case stopTimer
+    case adjustTimer(minutes: Int)
+    case capture, lockScreen
 }
 
 enum DeckLayout {
-    static let maxSessionKeys = 8
+    /// Session keys: the top row. More sessions are reached with knob 2 and panel 2.
+    static let maxSessionKeys = 5
+    /// Options of a question: every key but the terminal one's row neighbours.
+    static let maxOptionKeys = 8
+    static let meetingKey = 5, micKey = 6, outputKey = 7
     static let dictationKey = 8, recordKey = 9
+    /// Focus page, top row.
+    static let focusPresets: [(minutes: Int, isBreak: Bool)] = [(25, false), (50, false), (5, true)]
+    static let captureKey = 3, lockKey = 4
+    /// Panels the focus timer spans.
+    static let timerPanels = 3
     static let allowKey = 5, alwaysKey = 6, terminalKey = 8, denyKey = 9
     /// Counted from when the deck is sent the request; uploading all 14 screens takes about 0.2 s of it.
     static let armDelay: TimeInterval = 0.8
-    /// What the strip shows in full (4 lines of monospaced text across 704 px).
+    /// What the strip shows in full: 4 lines of monospaced text, `panelColumns` characters on each panel.
     static let maxCommandLength = 240, maxCommandLines = 4
+    static let panelColumns = 17
+    static var lineColumns: Int { panelColumns * DeckProtocol.stripCount }
 
     /// Allow (and Always) only for a command the strip shows whole.
     static func canAllow(_ a: DeckSnapshot.Approval) -> Bool {
-        !a.isPlan && a.command.count <= maxCommandLength
-            && a.command.split(separator: "\n", omittingEmptySubsequences: false).count <= maxCommandLines
+        !a.isPlan && a.command.count <= maxCommandLength && wrap(a.command, words: false).count <= maxCommandLines
+    }
+
+    /// Text cut into lines of `lineColumns` characters: a command at any character (nothing is
+    /// moved or hidden), a question between words when it can.
+    static func wrap(_ text: String, words: Bool) -> [String] {
+        var lines: [String] = []
+        for raw in text.split(separator: "\n", omittingEmptySubsequences: false) {
+            var rest = Substring(raw)
+            if rest.isEmpty { lines.append(""); continue }
+            while !rest.isEmpty {
+                if rest.count <= lineColumns { lines.append(String(rest)); break }
+                var cut = rest.index(rest.startIndex, offsetBy: lineColumns)
+                if words, let space = rest[..<cut].lastIndex(of: " "), space > rest.startIndex {
+                    cut = rest.index(after: space)
+                }
+                lines.append(String(rest[..<cut]))
+                rest = rest[cut...]
+            }
+        }
+        return lines
+    }
+
+    /// Panel `part`'s columns of each line: the strip reads as one text, and no character falls
+    /// in the gap between two panels.
+    static func requestLines(_ lines: [String], part: Int) -> [String] {
+        lines.prefix(maxCommandLines).map { line in
+            let chars = Array(line)
+            let start = part * panelColumns
+            guard start < chars.count else { return "" }
+            return String(chars[start..<min(chars.count, start + panelColumns)])
+        }
     }
 
     enum Mode: Equatable { case normal, approval, question }
@@ -130,7 +236,7 @@ enum DeckLayout {
     static func requestId(_ s: DeckSnapshot) -> UUID? { s.approval?.id ?? s.question?.id }
 
     static func clampedSelection(_ selected: Int, _ s: DeckSnapshot) -> Int {
-        let count = min(s.sessions.count, maxSessionKeys)
+        let count = s.sessions.count
         return count == 0 ? 0 : max(0, min(count - 1, selected))
     }
 
@@ -141,8 +247,8 @@ enum DeckLayout {
         for screen in DeckProtocol.Screen.all { t[screen] = .blank }
         let sel = clampedSelection(selected, s)
 
-        func sessionKeys(_ count: Int) {
-            for (i, session) in s.sessions.prefix(count).enumerated() {
+        func sessionKeys() {
+            for (i, session) in s.sessions.prefix(maxSessionKeys).enumerated() {
                 t[.key(i)] = .session(session, selected: i == sel)
             }
         }
@@ -150,32 +256,56 @@ enum DeckLayout {
         switch mode(s) {
         case .approval:
             let a = s.approval!
-            sessionKeys(5)
+            sessionKeys()
             if canAllow(a) {
                 t[.key(allowKey)] = .allow
                 if a.allowsAlways { t[.key(alwaysKey)] = .always }
             }
             if !a.isPlan { t[.key(denyKey)] = .deny }
             t[.key(terminalKey)] = .openTerminal
-            let body: String? = a.isPlan ? nil : a.command
+            let title = [a.project, a.tool].filter { !$0.isEmpty }.joined(separator: " · ")
+            let lines = wrap(a.command, words: false)
             for i in 0..<DeckProtocol.stripCount {
-                t[.strip(i)] = .request(title: [a.project, a.tool].filter { !$0.isEmpty }.joined(separator: " · "), body: body, part: i)
+                t[.strip(i)] = .request(title: i == 0 ? title : nil,
+                                        lines: a.isPlan ? nil : requestLines(lines, part: i), part: i)
             }
         case .question:
             let q = s.question!
-            for (i, label) in q.options.prefix(maxSessionKeys).enumerated() { t[.key(i)] = .option(label) }
+            for (i, label) in q.options.prefix(maxOptionKeys).enumerated() { t[.key(i)] = .option(label) }
             t[.key(terminalKey)] = .openTerminal
+            let lines = wrap(q.text, words: true)
             for i in 0..<DeckProtocol.stripCount {
-                t[.strip(i)] = .request(title: q.project, body: q.text, part: i)
+                t[.strip(i)] = .request(title: i == 0 ? q.project : nil, lines: requestLines(lines, part: i), part: i)
             }
         case .normal:
-            sessionKeys(maxSessionKeys)
+            switch s.page {
+            case .agents:
+                sessionKeys()
+                t[.strip(0)] = .usage(week: s.planWeek, resets: s.planWeekResets)
+                t[.strip(1)] = .focus(s.sessions.indices.contains(sel) ? s.sessions[sel] : nil)
+                t[.strip(2)] = .music(s.music)
+            case .focus:
+                for (i, p) in focusPresets.enumerated() {
+                    let active = s.timer.map { $0.total == p.minutes * 60 && $0.isBreak == p.isBreak } ?? false
+                    t[.key(i)] = .focusPreset(minutes: p.minutes, isBreak: p.isBreak, active: active)
+                }
+                t[.key(captureKey)] = .capture
+                t[.key(lockKey)] = .lock
+                if let timer = s.timer {
+                    for i in 0..<timerPanels { t[.strip(i)] = .timer(timer, part: i) }
+                } else {
+                    let v = s.vitals
+                    t[.strip(0)] = .vital(.cpu, value: v?.cpu, charging: false)
+                    t[.strip(1)] = .vital(.memory, value: v?.memory, charging: false)
+                    t[.strip(2)] = .vital(.battery, value: v?.battery, charging: v?.charging ?? false)
+                }
+            }
+            t[.key(meetingKey)] = .meeting(s.meeting, access: s.calendar)
+            if let muted = s.micMuted { t[.key(micKey)] = .mic(muted: muted) }
+            if let output = s.output { t[.key(outputKey)] = .output(output) }
             t[.key(dictationKey)] = .dictation(s.dictation)
-            if s.recordingAvailable { t[.key(recordKey)] = .record(on: s.recording) }
-            t[.strip(0)] = .usage(fiveHour: s.planFiveHour, week: s.planWeek)
-            t[.strip(1)] = .focus(s.sessions.indices.contains(sel) ? s.sessions[sel] : nil)
-            t[.strip(2)] = .music(s.music)
-            t[.strip(3)] = .mochi(state: s.overallState, clock: s.clock)
+            if s.recordingAvailable { t[.key(recordKey)] = .record(on: s.recording, ready: s.recordingReady) }
+            t[.strip(3)] = .mochi(state: s.overallState, clock: s.clock, page: s.page.rawValue, pages: DeckPage.allCases.count)
         }
         return t
     }
@@ -189,8 +319,13 @@ enum DeckLayout {
         let sel = clampedSelection(selected, s)
 
         switch event {
-        case .keyUp, .swipe:
-            return nil // swipes have no function yet; keys act on the way down
+        case .keyUp:
+            return nil // keys act on the way down
+
+        case .swipe(let left):
+            // A request keeps the agents page; otherwise the finger drags the next page in.
+            guard mode(s) == .normal else { return nil }
+            return .page(delta: left ? 1 : -1)
 
         case .keyDown(let k):
             switch mode(s) {
@@ -210,10 +345,28 @@ enum DeckLayout {
                 let q = s.question!
                 guard armed else { return nil }
                 if k == terminalKey { return .answerInTerminal(q.id) }
-                guard k < min(q.options.count, maxSessionKeys) else { return nil }
+                guard k < min(q.options.count, maxOptionKeys) else { return nil }
                 return .answer(q.id, q.options[k])
             case .normal:
-                if k < maxSessionKeys { return jump(k, s) }
+                if k < 5 {
+                    switch s.page {
+                    case .agents: return jump(k, s)
+                    case .focus:
+                        if k == captureKey { return .capture }
+                        if k == lockKey { return .lockScreen }
+                        let p = focusPresets[k]
+                        let active = s.timer.map { $0.total == p.minutes * 60 && $0.isBreak == p.isBreak } ?? false
+                        return active ? .stopTimer : .startTimer(minutes: p.minutes, isBreak: p.isBreak)
+                    }
+                }
+                if k == meetingKey {
+                    switch s.calendar {
+                    case .notAsked, .denied: return .askCalendar
+                    case .granted: return s.meeting?.hasLink == true ? .openMeeting : nil
+                    }
+                }
+                if k == micKey { return s.micMuted == nil ? nil : .toggleMic }
+                if k == outputKey { return s.output == nil ? nil : .nextOutput }
                 if k == dictationKey {
                     switch s.dictation {
                     case .idle: return .dictationStart
@@ -230,15 +383,17 @@ enum DeckLayout {
             case 0: return .brightness(delta: steps * 10)
             case 1: return .select(delta: steps)
             case 2: return .volume(delta: steps * 4)
-            default: return nil
+            default: return s.timer == nil ? nil : .adjustTimer(minutes: steps)
             }
 
         case .knobPress(let knob):
+            if knob == 3, s.timer != nil { return .stopTimer }
             return panelAction(knob, s, sel)
 
         case .stripTap(let panel):
             // In a request the strip is the request's text: a tap there does nothing.
             guard mode(s) == .normal else { return nil }
+            if s.page == .focus { return panel == 3 ? .openCoucou : nil }
             return panel == 2 ? .musicNext : panelAction(panel, s, sel)
         }
     }

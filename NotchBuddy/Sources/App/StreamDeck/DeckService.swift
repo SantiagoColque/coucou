@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import EventKit
 import Foundation
 
 // MARK: - Stream deck: the bridge to the island (GitHub build)
@@ -32,6 +33,17 @@ final class DeckService: ObservableObject {
     /// What each screen shows now: only a changed tile is drawn again.
     private var drawn: [DeckProtocol.Screen: DeckTile] = [:]
     private var selected = 0
+    private var page: DeckPage = .agents
+    private var lastRequestId: UUID?
+    /// The focus timer: when it ends, and its length (seconds).
+    private var focusEnd: Date?
+    private var focusTotal = 0
+    private var focusIsBreak = false
+    private var secondTimer: Timer?
+    private let vitals = DeckVitals()
+    private var lastVitals: DeckSnapshot.Vitals?
+    private var vitalsTimer: Timer?
+    private var audioListening = false
     private var armClock = DeckArmClock()
     private var screensOn = true
     private var brightness: Int {
@@ -79,6 +91,8 @@ final class DeckService: ObservableObject {
         cancellables = []
         minuteTimer?.invalidate()
         minuteTimer = nil
+        stopFocusTimer()
+        updateVitalsTimer(on: false)
         if device.isConnected {
             device.send([DeckProtocol.clearAll(), DeckProtocol.commit()])
         }
@@ -92,7 +106,7 @@ final class DeckService: ObservableObject {
         drawn = [:]
         minuteTimer?.invalidate()
         minuteTimer = nil
-        guard on else { return }
+        guard on else { updateVitalsTimer(on: false); return }
         screensOn = true
         // A request already waiting is shown again from scratch: its keys wait again.
         armClock = DeckArmClock()
@@ -126,31 +140,58 @@ final class DeckService: ObservableObject {
             NoteTaker.shared.$recording.map { _ in () }.eraseToAnyPublisher(),
             FlowDictation.shared.$isEnabled.map { _ in () }.eraseToAnyPublisher(),
             FlowDictation.shared.pill.model.$phase.map { _ in () }.eraseToAnyPublisher(),
+            Parakeet.shared.$state.map { _ in () }.eraseToAnyPublisher(),
+            NotificationCenter.default.publisher(for: .EKEventStoreChanged).map { _ in () }.eraseToAnyPublisher(),
         ]
         // @Published sends before the property changes: the debounce lets the value settle, and it is read back.
         Publishers.MergeMany(sources)
             .debounce(for: .milliseconds(100), scheduler: RunLoop.main)
             .sink { [weak self] in MainActor.assumeIsolated { self?.redraw() } }
             .store(in: &cancellables)
+        // A new default microphone or output (AirPods put on) shows at once. CoreAudio listeners live
+        // as long as the app: added once, they only ask for a redraw, which does nothing while the deck is off.
+        if !audioListening {
+            audioListening = true
+            _ = DeckAudio.observe { [weak self] in self?.redraw() }
+        }
     }
 
     // MARK: The app's state, as the deck sees it
 
     private static let noAlways: Set<String> = ["agent_codex", "agent_copilot", "agent_muse"]
 
+    /// A key for one session among several behind a pill: "<pill>|<session>".
+    private static let sessionSeparator = "|"
+    private static func sessionKey(_ task: String, _ session: String) -> String { task + sessionSeparator + session }
+
     private func snapshot() -> DeckSnapshot {
         let app = AppState.shared
         var s = DeckSnapshot()
         // The demo is not real: the deck shows none of it.
         if !DemoEngine.shared.isActive {
-            s.sessions = app.tasks
-                .filter { $0.source != .n8n && PillCatalog.isSession($0.id) }
-                .map { task in
+            // One key per session: several sessions of one client (two `claude` in Ghostty) share a
+            // pill, and its card lists them in sessionLines.
+            var sessions: [DeckSnapshot.Session] = []
+            for task in app.tasks where task.source != .n8n && PillCatalog.isSession(task.id) {
+                let project = task.sessionCwd.map { URL(fileURLWithPath: $0).lastPathComponent }
+                if task.sessionLines.isEmpty {
                     let step = task.steps.indices.contains(task.stepIndex) ? task.steps[task.stepIndex] : (task.steps.last ?? "")
-                    return .init(id: task.id, agent: task.name,
-                                 project: task.sessionCwd.map { URL(fileURLWithPath: $0).lastPathComponent },
-                                 state: task.state.rawValue, step: step, color: task.color)
+                    sessions.append(.init(id: task.id, agent: task.name, project: project,
+                                          state: task.state.rawValue, step: step, color: task.color))
+                } else {
+                    for line in task.sessionLines {
+                        sessions.append(.init(id: Self.sessionKey(task.id, line.id), agent: line.title,
+                                              project: line.project ?? project,
+                                              state: line.state.rawValue, step: line.lastStep, color: task.color))
+                    }
                 }
+            }
+            // Two sessions in one project: the conversation's title tells them apart.
+            let names = sessions.map { $0.project ?? $0.agent }
+            for i in sessions.indices where names.filter({ $0 == names[i] }).count > 1 && !sessions[i].agent.isEmpty {
+                sessions[i].project = sessions[i].agent
+            }
+            s.sessions = sessions
             if let a = app.pendingApproval, a.sessionId != "demo_session" {
                 s.approval = .init(id: a.id, tool: a.tool, command: a.command, project: a.projectName,
                                    allowsAlways: !Self.noAlways.contains(PillCatalog.basePillId(a.pillId)),
@@ -166,8 +207,8 @@ final class DeckService: ObservableObject {
             }
         }
         if let usage = app.claudePlanUsage {
-            s.planFiveHour = usage.fiveHour.map(ClaudePlanGauge.effectivePct)
             s.planWeek = usage.sevenDay.map(ClaudePlanGauge.effectivePct)
+            s.planWeekResets = usage.sevenDay?.resetsAt
         }
         let spotify = SpotifyController.shared
         if let track = spotify.track {
@@ -189,6 +230,16 @@ final class DeckService: ObservableObject {
         }
         s.recordingAvailable = true
         s.recording = NoteTaker.shared.isRecording
+        s.recordingReady = Parakeet.shared.isReady
+        s.page = page
+        s.calendar = DeckCalendar.access
+        s.meeting = DeckCalendar.snapshot(DeckCalendar.next())
+        s.micMuted = DeckAudio.micMuted()
+        s.output = DeckAudio.outputName()
+        if let end = focusEnd {
+            s.timer = .init(remaining: max(0, Int(end.timeIntervalSinceNow.rounded(.up))), total: focusTotal, isBreak: focusIsBreak)
+        }
+        s.vitals = lastVitals
         s.overallState = app.effectiveState.rawValue
         s.clock = clockFormat.string(from: Date())
         return s
@@ -198,7 +249,7 @@ final class DeckService: ObservableObject {
 
     private func redraw() {
         guard device.isConnected else { return }
-        let s = snapshot()
+        var s = snapshot()
         // Screens turned off with knob 1: a request waiting for the user lights them up again.
         if !screensOn, DeckLayout.requestId(s) != nil {
             screensOn = true
@@ -206,7 +257,15 @@ final class DeckService: ObservableObject {
             device.send([DeckProtocol.brightness(brightness)])
         }
         guard screensOn else { return }
-        armClock.update(requestId: DeckLayout.requestId(s), now: Date())
+        // A new request brings the deck back to the agents page, where its sessions are.
+        let requestId = DeckLayout.requestId(s)
+        if let requestId, requestId != lastRequestId, page != .agents {
+            page = .agents
+            s.page = .agents
+        }
+        lastRequestId = requestId
+        updateVitalsTimer(on: page == .focus && DeckLayout.mode(s) == .normal && s.timer == nil)
+        armClock.update(requestId: requestId, now: Date())
         selected = DeckLayout.clampedSelection(selected, s)
         let tiles = DeckLayout.tiles(s, selected: selected)
         var reports: [[UInt8]] = []
@@ -251,7 +310,8 @@ final class DeckService: ObservableObject {
 
     private func perform(_ action: DeckAction) {
         let app = AppState.shared
-        let spotifyActive = SpotifyController.shared.track != nil
+        // Spotify open is enough: play/pause works even while its pill (and so its track) is off.
+        let spotifyActive = SpotifyController.shared.track != nil || SpotifyController.shared.isRunning
         switch action {
         case .decide(let id, let decision):
             // The request must still be the one the deck showed.
@@ -268,7 +328,9 @@ final class DeckService: ObservableObject {
         case .jumpToRequest:
             (NSApp.delegate as? AppDelegate)?.islandController?.handleHotKey(.jumpToTerminal)
         case .jump(let sessionId):
-            jump(to: app.tasks.first { $0.id == sessionId })
+            let session = snapshot().sessions.first { $0.id == sessionId }
+            jump(to: app.tasks.first { $0.id == sessionId || sessionId.hasPrefix($0.id + Self.sessionSeparator) },
+                 names: [session?.agent, session?.project].compactMap { $0 })
         case .dictationStart:
             FlowDictation.shared.startHandsFree()
         case .dictationStop:
@@ -297,15 +359,114 @@ final class DeckService: ObservableObject {
             }
         case .openCoucou:
             FlowHubController.shared.show()
+        case .page(let delta):
+            let count = DeckPage.allCases.count
+            page = DeckPage(rawValue: ((page.rawValue + delta) % count + count) % count) ?? .agents
+            if page == .focus { lastVitals = vitals.sample() } // primes the CPU reading
+            redraw()
+        case .openMeeting:
+            if let event = DeckCalendar.next(), let url = DeckCalendar.link(event) {
+                NSWorkspace.shared.open(url)
+            }
+        case .askCalendar:
+            DeckCalendar.ask { [weak self] in self?.redraw() }
+        case .toggleMic:
+            DeckAudio.toggleMic()
+            redraw()
+        case .nextOutput:
+            DeckAudio.nextOutput()
+            redraw()
+        case .startTimer(let minutes, let isBreak):
+            startFocusTimer(seconds: minutes * 60, isBreak: isBreak)
+        case .stopTimer:
+            stopFocusTimer()
+            redraw()
+        case .adjustTimer(let minutes):
+            guard let end = focusEnd else { return }
+            let newEnd = end.addingTimeInterval(TimeInterval(minutes * 60))
+            // Never below a minute left; the total grows with it so the bar stays honest.
+            guard newEnd.timeIntervalSinceNow >= 60 else { return }
+            focusEnd = newEnd
+            focusTotal = max(60, focusTotal + minutes * 60)
+            redraw()
+        case .capture:
+            ScreenCapture.shared.begin()
+        case .lockScreen:
+            DeckLock.now()
         }
     }
 
+    // MARK: Focus timer and vitals
+
+    private func startFocusTimer(seconds: Int, isBreak: Bool) {
+        focusEnd = Date().addingTimeInterval(TimeInterval(seconds))
+        focusTotal = seconds
+        focusIsBreak = isBreak
+        secondTimer?.invalidate()
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.focusTick() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        secondTimer = timer
+        redraw()
+    }
+
+    private func focusTick() {
+        guard let end = focusEnd else { return }
+        if end.timeIntervalSinceNow <= 0 {
+            stopFocusTimer()
+            SoundEngine.shared.play("finish")
+        }
+        redraw()
+    }
+
+    private func stopFocusTimer() {
+        secondTimer?.invalidate()
+        secondTimer = nil
+        focusEnd = nil
+    }
+
+    /// CPU, memory and battery are read every 3 s, only while the focus page shows them.
+    private func updateVitalsTimer(on: Bool) {
+        if !on {
+            vitalsTimer?.invalidate()
+            vitalsTimer = nil
+            return
+        }
+        guard vitalsTimer == nil else { return }
+        let timer = Timer(timeInterval: 3, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                self.lastVitals = self.vitals.sample()
+                self.redraw()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        vitalsTimer = timer
+    }
+
     /// Same routing as the island's "Open terminal" (IslandViewContent).
-    private func jump(to task: AgentTask?) {
+    /// `names`: the session's conversation title and project, to find its own window or tab.
+    private func jump(to task: AgentTask?, names: [String]) {
         guard let task else { return }
         if !(task.pill == "integration_claude" && ClaudeHost.activate(task.hostApp)),
            !TerminalTarget.activate(sessionBundleId: task.sessionBundleId) {
             NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
+            return
+        }
+        // Then, once the terminal is in front (activating it brings its own front window), its
+        // window or tab for this session: raised before, it would be covered again.
+        let apps = NSWorkspace.shared.runningApplications
+        guard let terminal = [task.hostApp, task.sessionBundleId].compactMap({ $0 }).lazy
+            .compactMap({ id in apps.first { $0.bundleIdentifier == id } }).first else { return }
+        DeckWindowFocus.front(pid: terminal.processIdentifier)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            MainActor.assumeIsolated {
+                // The conversation's title first; the project only when no title matches.
+                let found = names.contains { DeckWindowFocus.focus(pid: terminal.processIdentifier, names: [$0]) }
+                DeckWindowFocus.front(pid: terminal.processIdentifier)
+                DeckDevice.log("jump: \(terminal.bundleIdentifier ?? "?") \(found ? "window found" : "no window matched")")
+            }
         }
     }
 }

@@ -18,25 +18,28 @@ enum DeckRenderer {
         if case .strip = screen { isStrip = true } else { isStrip = false }
         let size = isStrip ? DeckProtocol.stripSize : DeckProtocol.keySize
 
-        if case .request(let title, let body, let part) = tile {
-            guard let image = requestImage(title: title, body: body),
-                  let quarter = image.cropping(to: CGRect(x: part * size.width, y: 0, width: size.width, height: size.height))
+        if case .timer(let timer, let part) = tile {
+            // Drawn once across the panels and their gaps; each panel takes its own piece.
+            let pitch = size.width + DeckProtocol.stripGap
+            guard let image = timerImage(timer),
+                  let piece = image.cropping(to: CGRect(x: part * pitch, y: 0, width: size.width, height: size.height))
             else { return nil }
-            return encode(quarter)
+            return encode(piece)
         }
         let view = DeckTileView(tile: tile, artwork: artwork)
         guard let image = render(view, size: CGSize(width: size.width, height: size.height)) else { return nil }
         return encode(image)
     }
 
-    /// The last request drawn: its four quarters come from one render.
-    private static var lastRequest: (title: String, body: String?, image: CGImage)?
+    /// The last timer drawn: its three panels come from one render.
+    private static var lastTimer: (timer: DeckSnapshot.FocusTimer, image: CGImage)?
 
-    private static func requestImage(title: String, body: String?) -> CGImage? {
-        if let last = lastRequest, last.title == title, last.body == body { return last.image }
-        let size = CGSize(width: DeckProtocol.stripSize.width * DeckProtocol.stripCount, height: DeckProtocol.stripSize.height)
-        guard let image = render(DeckRequestPanel(title: title, text: body), size: size) else { return nil }
-        lastRequest = (title, body, image)
+    private static func timerImage(_ timer: DeckSnapshot.FocusTimer) -> CGImage? {
+        if let last = lastTimer, last.timer == timer { return last.image }
+        let n = DeckLayout.timerPanels
+        let size = CGSize(width: DeckProtocol.stripSize.width * n + DeckProtocol.stripGap * (n - 1), height: DeckProtocol.stripSize.height)
+        guard let image = render(DeckTimerPanel(timer: timer), size: size) else { return nil }
+        lastTimer = (timer, image)
         return image
     }
 
@@ -75,6 +78,27 @@ private var deckGrey: Color { Color(white: 0.55) }
 
 private func botState(_ raw: String) -> BotState { BotState(rawValue: raw) ?? .idle }
 
+/// A session's state in one word, readable on a key.
+private func deckStateLabel(_ raw: String) -> String {
+    switch botState(raw) {
+    case .working, .thinking, .searching: String(localized: "deck.state.working")
+    case .approval, .question: String(localized: "deck.state.waiting")
+    case .finished: String(localized: "deck.state.done")
+    case .error, .ratelimit, .dizzy: String(localized: "deck.state.error")
+    case .idle, .sleeping: String(localized: "deck.state.idle")
+    }
+}
+
+private func deckStateColor(_ raw: String) -> String {
+    switch botState(raw) {
+    case .working, .thinking, .searching: "#3B82F6"
+    case .approval, .question: "#F59E0B"
+    case .finished: "#22C55E"
+    case .error, .ratelimit, .dizzy: "#F4505E"
+    case .idle, .sleeping: "#8C8C8C"
+    }
+}
+
 private struct DeckTileView: View {
     let tile: DeckTile
     let artwork: NSImage?
@@ -89,8 +113,10 @@ private struct DeckTileView: View {
 
     @ViewBuilder private var content: some View {
         switch tile {
-        case .blank, .request:
+        case .blank, .timer:
             EmptyView()
+        case .request(let title, let lines, _):
+            DeckRequestPanel(title: title, lines: lines)
         case .session(let s, let selected):
             DeckSessionKey(session: s, selected: selected)
         case .allow:
@@ -103,7 +129,7 @@ private struct DeckTileView: View {
             DeckButtonKey(symbol: "terminal", title: String(localized: "deck.terminal"), color: deckGrey, filled: false)
         case .option(let label):
             Text(label)
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(size: 20, weight: .bold))
                 .multilineTextAlignment(.center)
                 .minimumScaleFactor(0.5)
                 .lineLimit(4)
@@ -116,28 +142,206 @@ private struct DeckTileView: View {
         case .dictation(let d):
             switch d {
             case .off: DeckButtonKey(symbol: "mic.slash", title: String(localized: "deck.dictation.off"), color: deckGrey, filled: false)
-            case .idle: DeckButtonKey(symbol: "mic", title: String(localized: "deck.dictation.hold"), color: deckGrey, filled: false)
+            case .idle: DeckButtonKey(symbol: "waveform", title: String(localized: "deck.dictation.hold"), color: deckGrey, filled: false)
             case .listening: DeckButtonKey(symbol: "mic.fill", title: String(localized: "deck.dictation.listening"), color: deckRed)
             case .thinking: DeckButtonKey(symbol: "ellipsis", title: "…", color: deckOrange)
             }
-        case .record(let on):
-            DeckButtonKey(symbol: on ? "stop.circle.fill" : "record.circle",
-                          title: on ? String(localized: "deck.recording") : String(localized: "deck.record"),
-                          color: on ? deckRed : deckGrey, filled: on)
-        case .usage(let five, let week):
-            DeckUsagePanel(fiveHour: five, week: week)
+        case .record(let on, let ready):
+            if !on && !ready {
+                // The Notetaker's transcription model is not downloaded: a press opens where to get it.
+                DeckButtonKey(symbol: "arrow.down.circle", title: String(localized: "deck.record.models"), color: deckOrange, filled: false)
+            } else {
+                DeckButtonKey(symbol: on ? "stop.circle.fill" : "record.circle",
+                              title: on ? String(localized: "deck.recording") : String(localized: "deck.record"),
+                              color: on ? deckRed : deckGrey, filled: on)
+            }
+        case .meeting(let m, let access):
+            DeckMeetingKey(meeting: m, access: access)
+        case .mic(let muted):
+            DeckButtonKey(symbol: muted ? "mic.slash.fill" : "mic.fill",
+                          title: muted ? String(localized: "deck.mic.off") : String(localized: "deck.mic.on"),
+                          color: muted ? deckRed : deckGrey, filled: muted)
+        case .output(let name):
+            DeckButtonKey(symbol: outputSymbol(name), title: name, color: deckGrey, filled: false)
+        case .focusPreset(let minutes, let isBreak, let active):
+            DeckPresetKey(minutes: minutes, isBreak: isBreak, active: active)
+        case .capture:
+            DeckButtonKey(symbol: "camera.viewfinder", title: String(localized: "deck.capture"), color: deckGrey, filled: false)
+        case .lock:
+            DeckButtonKey(symbol: "lock.fill", title: String(localized: "deck.lock"), color: deckGrey, filled: false)
+        case .vital(let kind, let value, let charging):
+            DeckVitalPanel(kind: kind, value: value, charging: charging)
+        case .usage(let week, let resets):
+            DeckUsagePanel(week: week, resets: resets)
         case .focus(let s):
             DeckFocusPanel(session: s)
         case .music(let m):
             DeckMusicPanel(music: m, artwork: artwork)
-        case .mochi(let state, let clock):
-            HStack(spacing: 6) {
-                MochiStill(state: botState(state), bodyHex: "#FFFFFF").frame(width: 84, height: 84)
-                Text(clock).font(.system(size: 28, weight: .semibold, design: .rounded)).foregroundStyle(.white)
-                    .minimumScaleFactor(0.6).lineLimit(1)
+        case .mochi(let state, let clock, let page, let pages):
+            VStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    MochiStill(state: botState(state), bodyHex: "#FFFFFF").frame(width: 72, height: 72)
+                    Text(clock).font(.system(size: 34, weight: .semibold, design: .rounded)).foregroundStyle(.white)
+                        .minimumScaleFactor(0.6).lineLimit(1)
+                }
+                // Which page the deck shows: swipe the strip for the others.
+                HStack(spacing: 8) {
+                    ForEach(0..<pages, id: \.self) { i in
+                        Capsule().fill(i == page ? Color.white : Color.white.opacity(0.3))
+                            .frame(width: i == page ? 22 : 9, height: 9)
+                    }
+                }
+                .padding(.bottom, 6)
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal, 2)
         }
+    }
+}
+
+private func outputSymbol(_ name: String) -> String {
+    let n = name.lowercased()
+    if n.contains("airpods max") { return "airpodsmax" }
+    if n.contains("airpods pro") { return "airpodspro" }
+    if n.contains("airpods") { return "airpods" }
+    if n.contains("headphone") || n.contains("auricular") || n.contains("buds") || n.contains("headset") { return "headphones" }
+    if n.contains("display") || n.contains("hdmi") || n.contains("monitor") { return "tv" }
+    return "speaker.wave.2.fill"
+}
+
+/// The next meeting: how soon, and its name. Orange from 5 minutes before until it ends.
+private struct DeckMeetingKey: View {
+    let meeting: DeckSnapshot.Meeting?
+    let access: DeckSnapshot.CalendarAccess
+
+    var body: some View {
+        if access != .granted {
+            DeckButtonKey(symbol: "calendar", title: String(localized: "deck.meeting.calendar"), color: deckGrey, filled: false)
+        } else if let m = meeting {
+            let soon = m.minutes <= 5
+            VStack(spacing: 2) {
+                Text(when(m)).font(.system(size: 24, weight: .heavy, design: .rounded))
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                Text(m.title).font(.system(size: 15, weight: .bold)).lineLimit(2).minimumScaleFactor(0.7)
+                    .multilineTextAlignment(.center)
+                if m.hasLink {
+                    Image(systemName: "video.fill").font(.system(size: 16, weight: .bold))
+                }
+            }
+            .foregroundStyle(soon ? .white : deckOrange)
+            .padding(6)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(RoundedRectangle(cornerRadius: 16).fill(soon ? deckOrange : Color.white.opacity(0.06)))
+            .padding(3)
+        } else {
+            DeckButtonKey(symbol: "calendar", title: String(localized: "deck.meeting.none"), color: deckGrey, filled: false)
+        }
+    }
+
+    private func when(_ m: DeckSnapshot.Meeting) -> String {
+        if m.minutes <= 0 { return String(localized: "deck.meeting.now") }
+        if m.minutes <= 60 { return String(format: String(localized: "deck.minutes %lld"), Int64(m.minutes)) }
+        return m.start
+    }
+}
+
+/// A focus or break length; filled while that timer runs.
+private struct DeckPresetKey: View {
+    let minutes: Int
+    let isBreak: Bool
+    let active: Bool
+
+    var body: some View {
+        let color = isBreak ? deckGreen : deckOrange
+        VStack(spacing: 0) {
+            Text(verbatim: "\(minutes)").font(.system(size: 46, weight: .heavy, design: .rounded))
+            Text(isBreak ? String(localized: "deck.break") : String(localized: "deck.focus"))
+                .font(.system(size: 17, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
+        }
+        .foregroundStyle(active ? .white : color)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(RoundedRectangle(cornerRadius: 16).fill(active ? color : Color.white.opacity(0.06)))
+        .padding(3)
+    }
+}
+
+/// The focus timer across panels 1-3: the time left, and the strip as its progress bar.
+private struct DeckTimerPanel: View {
+    let timer: DeckSnapshot.FocusTimer
+
+    var body: some View {
+        let color = timer.isBreak ? deckGreen : deckOrange
+        let done = timer.total > 0 ? 1 - Double(timer.remaining) / Double(timer.total) : 1
+        VStack(alignment: .leading, spacing: 8) {
+            // The time fills panel 1, the label starts on panel 2: no letter falls in a gap.
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Text(verbatim: String(format: "%d:%02d", timer.remaining / 60, timer.remaining % 60))
+                    .font(.system(size: 50, weight: .heavy, design: .rounded)).monospacedDigit()
+                    .foregroundStyle(.white)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .frame(width: CGFloat(DeckProtocol.stripSize.width) - 14, alignment: .leading)
+                Spacer().frame(width: CGFloat(DeckProtocol.stripGap) + 10)
+                Text(timer.isBreak ? String(localized: "deck.break") : String(localized: "deck.focus"))
+                    .font(.system(size: 28, weight: .heavy)).foregroundStyle(color)
+                    .lineLimit(1).minimumScaleFactor(0.6)
+                    .frame(width: CGFloat(DeckProtocol.stripSize.width) - 20, alignment: .leading)
+                Spacer(minLength: 0)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.15))
+                    Capsule().fill(color).frame(width: geo.size.width * min(1, max(0, done)))
+                }
+            }
+            .frame(height: 18)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Color.black)
+        .environment(\.colorScheme, .dark)
+    }
+}
+
+/// CPU, memory or battery: a big number and a bar, red when it needs a look.
+private struct DeckVitalPanel: View {
+    let kind: DeckVital
+    let value: Int?
+    let charging: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(label).font(.system(size: 18, weight: .heavy)).foregroundStyle(.white)
+                if charging { Image(systemName: "bolt.fill").font(.system(size: 15)).foregroundStyle(deckGreen) }
+                Spacer()
+                Text(verbatim: value.map { "\($0)%" } ?? "–").font(.system(size: 30, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.white.opacity(0.15))
+                    Capsule().fill(color).frame(width: geo.size.width * min(1, max(0, Double(value ?? 0) / 100)))
+                }
+            }
+            .frame(height: 14)
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    private var label: String {
+        switch kind {
+        case .cpu: "CPU"
+        case .memory: String(localized: "deck.vitals.memory")
+        case .battery: String(localized: "deck.vitals.battery")
+        }
+    }
+
+    private var color: Color {
+        guard let v = value else { return deckGrey }
+        if kind == .battery { return v <= 15 ? deckRed : v <= 30 ? deckOrange : deckGreen }
+        return v >= 85 ? deckRed : v >= 60 ? deckOrange : deckGreen
     }
 }
 
@@ -148,13 +352,13 @@ private struct DeckButtonKey: View {
     var filled = true
 
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: symbol).font(.system(size: 38, weight: .bold))
-            Text(title).font(.system(size: 15, weight: .bold)).lineLimit(2).minimumScaleFactor(0.6)
+        VStack(spacing: 4) {
+            Image(systemName: symbol).font(.system(size: 46, weight: .bold))
+            Text(title).font(.system(size: 18, weight: .bold)).lineLimit(2).minimumScaleFactor(0.6)
                 .multilineTextAlignment(.center)
         }
         .foregroundStyle(filled ? .white : color)
-        .padding(6)
+        .padding(4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: 16).fill(filled ? color : Color.white.opacity(0.06)))
         .padding(3)
@@ -169,20 +373,20 @@ private struct DeckSessionKey: View {
     private var needsYou: Bool { session.state == "approval" || session.state == "question" }
 
     var body: some View {
-        VStack(spacing: 2) {
+        VStack(spacing: 0) {
             MochiStill(state: botState(session.state), bodyHex: "#FFFFFF",
                        pose: .idle(id: session.id, tick: 0))
-                .frame(width: 58, height: 58)
-                .background(Circle().fill(Color.mochiTile(hex: session.color)).frame(width: 64, height: 64))
-                .padding(.top, 6)
+                .frame(width: 68, height: 68)
+                .background(Circle().fill(Color.mochiTile(hex: session.color)).frame(width: 62, height: 62))
+                .padding(.top, 2)
             Text(session.project ?? session.agent)
-                .font(.system(size: 14, weight: .bold)).lineLimit(1).minimumScaleFactor(0.6)
+                .font(.system(size: 19, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.55)
                 .foregroundStyle(.white)
-            Text(session.step.isEmpty ? session.agent : session.step)
-                .font(.system(size: 11)).lineLimit(1).truncationMode(.middle)
-                .foregroundStyle(.white.opacity(0.7))
+            Text(deckStateLabel(session.state))
+                .font(.system(size: 15, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
+                .foregroundStyle(Color(hex: deckStateColor(session.state)))
         }
-        .padding(.horizontal, 6)
+        .padding(.horizontal, 4)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
@@ -192,65 +396,68 @@ private struct DeckSessionKey: View {
     }
 }
 
+/// The weekly limit, big: the Max plan has no limit per session.
 private struct DeckUsagePanel: View {
-    let fiveHour: Double?
     let week: Double?
+    let resets: Date?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(verbatim: "Claude").font(.system(size: 15, weight: .bold)).foregroundStyle(.white)
-            if fiveHour == nil && week == nil {
-                Text(String(localized: "deck.usage.none")).font(.system(size: 13)).foregroundStyle(deckGrey)
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(String(localized: "deck.usage.week")).font(.system(size: 18, weight: .heavy)).foregroundStyle(.white)
+                Spacer()
+                if let week {
+                    Text(verbatim: "\(Int(week.rounded()))%").font(.system(size: 30, weight: .heavy, design: .rounded))
+                        .foregroundStyle(.white)
+                }
+            }
+            if let week {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        Capsule().fill(Color.white.opacity(0.15))
+                        Capsule().fill(Color(hex: ClaudePlanGauge.color(for: week)))
+                            .frame(width: geo.size.width * min(1, max(0, week / 100)))
+                    }
+                }
+                .frame(height: 14)
+                if let resets {
+                    Text(String(localized: "deck.usage.resets \(Self.day.string(from: resets))"))
+                        .font(.system(size: 15, weight: .semibold)).foregroundStyle(.white.opacity(0.7))
+                        .lineLimit(1).minimumScaleFactor(0.7)
+                }
             } else {
-                bar("5 h", fiveHour)
-                bar(String(localized: "deck.usage.week"), week)
+                Text(String(localized: "deck.usage.none")).font(.system(size: 17, weight: .semibold)).foregroundStyle(deckGrey)
             }
         }
-        .padding(12)
+        .padding(10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
-    private func bar(_ label: String, _ pct: Double?) -> some View {
-        let p = pct ?? 0
-        return VStack(alignment: .leading, spacing: 3) {
-            HStack {
-                Text(label).font(.system(size: 12, weight: .semibold)).foregroundStyle(.white.opacity(0.8))
-                Spacer()
-                Text(pct.map { "\(Int($0.rounded()))%" } ?? "–").font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
-            }
-            GeometryReader { geo in
-                ZStack(alignment: .leading) {
-                    Capsule().fill(Color.white.opacity(0.15))
-                    Capsule().fill(Color(hex: ClaudePlanGauge.color(for: pct)))
-                        .frame(width: geo.size.width * min(1, max(0, p / 100)))
-                }
-            }
-            .frame(height: 8)
-        }
-    }
+    private static let day: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("EEE HH:mm")
+        return f
+    }()
 }
 
+/// The session picked with knob 2 (white border on its key): what it is doing, in full.
 private struct DeckFocusPanel: View {
     let session: DeckSnapshot.Session?
 
     var body: some View {
         if let s = session {
-            HStack(spacing: 8) {
-                MochiStill(state: botState(s.state), bodyHex: "#FFFFFF", pose: .idle(id: s.id, tick: 1))
-                    .frame(width: 48, height: 48)
-                    .background(Circle().fill(Color.mochiTile(hex: s.color)).frame(width: 54, height: 54))
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(s.project ?? s.agent).font(.system(size: 15, weight: .bold)).lineLimit(1).minimumScaleFactor(0.7)
-                    Text(s.agent).font(.system(size: 11)).foregroundStyle(.white.opacity(0.6)).lineLimit(1)
-                    Text(s.step).font(.system(size: 12)).lineLimit(3).foregroundStyle(.white.opacity(0.85))
-                }
-                .foregroundStyle(.white)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(s.project ?? s.agent).font(.system(size: 20, weight: .heavy)).lineLimit(1).minimumScaleFactor(0.6)
+                    .foregroundStyle(Color(hex: deckStateColor(s.state)))
+                Text(s.step.isEmpty ? deckStateLabel(s.state) : s.step)
+                    .font(.system(size: 17, weight: .semibold)).lineLimit(3).minimumScaleFactor(0.75)
+                    .foregroundStyle(.white)
                 Spacer(minLength: 0)
             }
             .padding(10)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         } else {
-            Text(String(localized: "deck.sessions.none")).font(.system(size: 14)).foregroundStyle(deckGrey)
+            Text(String(localized: "deck.sessions.none")).font(.system(size: 18, weight: .semibold)).foregroundStyle(deckGrey)
         }
     }
 }
@@ -264,48 +471,59 @@ private struct DeckMusicPanel: View {
             HStack(spacing: 8) {
                 if let artwork {
                     Image(nsImage: artwork).resizable().aspectRatio(contentMode: .fill)
-                        .frame(width: 72, height: 72).clipShape(RoundedRectangle(cornerRadius: 8))
+                        .frame(width: 84, height: 84).clipShape(RoundedRectangle(cornerRadius: 10))
                 }
-                VStack(alignment: .leading, spacing: 3) {
-                    Image(systemName: m.playing ? "play.fill" : "pause.fill").font(.system(size: 12))
+                VStack(alignment: .leading, spacing: 2) {
+                    Image(systemName: m.playing ? "play.fill" : "pause.fill").font(.system(size: 16))
                         .foregroundStyle(m.playing ? deckGreen : deckGrey)
-                    Text(m.title).font(.system(size: 14, weight: .bold)).lineLimit(2).minimumScaleFactor(0.7)
-                    Text(m.artist).font(.system(size: 12)).lineLimit(1).foregroundStyle(.white.opacity(0.7))
+                    Text(m.title).font(.system(size: 18, weight: .heavy)).lineLimit(2).minimumScaleFactor(0.6)
+                    Text(m.artist).font(.system(size: 14, weight: .semibold)).lineLimit(1).foregroundStyle(.white.opacity(0.7))
                 }
                 .foregroundStyle(.white)
                 Spacer(minLength: 0)
             }
-            .padding(10)
+            .padding(.horizontal, 8)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         } else {
             VStack(spacing: 6) {
-                Image(systemName: "music.note").font(.system(size: 26))
-                Text(String(localized: "deck.music.none")).font(.system(size: 13))
+                Image(systemName: "music.note").font(.system(size: 36, weight: .semibold))
+                Text(String(localized: "deck.music.none")).font(.system(size: 17, weight: .semibold))
             }
             .foregroundStyle(deckGrey)
         }
     }
 }
 
-/// A permission request or a question, across the whole strip.
+/// One panel of a permission request or a question. The text is a grid of monospaced characters,
+/// `DeckLayout.panelColumns` per panel, so the four panels read as one text and nothing falls in a gap.
 private struct DeckRequestPanel: View {
-    let title: String
+    /// Panel 0 only.
+    let title: String?
     /// nil: the request is answered on the Mac (a plan).
-    let text: String?
+    let lines: [String]?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title).font(.system(size: 14, weight: .bold)).foregroundStyle(deckOrange).lineLimit(1)
-            Text(text ?? String(localized: "deck.plan.onMac"))
-                .font(.system(size: 15, weight: .medium, design: .monospaced))
-                .foregroundStyle(.white)
-                .lineLimit(DeckLayout.maxCommandLines)
-                .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title ?? " ").font(.system(size: 15, weight: .heavy)).foregroundStyle(deckOrange)
+                .lineLimit(1).minimumScaleFactor(0.6)
+                .frame(height: 19, alignment: .leading)
+            if let lines {
+                ForEach(Array(lines.enumerated()), id: \.offset) { _, line in
+                    Text(verbatim: line.isEmpty ? " " : line)
+                        .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.white)
+                        .lineLimit(1).fixedSize()
+                        .frame(height: 20, alignment: .leading)
+                }
+            } else if title != nil {
+                Text(String(localized: "deck.plan.onMac"))
+                    .font(.system(size: 16, weight: .semibold)).foregroundStyle(.white)
+                    .lineLimit(3).minimumScaleFactor(0.7)
+            }
             Spacer(minLength: 0)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 6)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.black)
         .environment(\.colorScheme, .dark)

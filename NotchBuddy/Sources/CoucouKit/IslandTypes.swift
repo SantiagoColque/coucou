@@ -101,6 +101,8 @@ struct SessionLine: Identifiable, Equatable {
     var lastStep: String
     /// The session the pill shows (its name, steps and state are the pill's).
     var isShown: Bool
+    /// The project folder it runs in, for the stream deck's keys.
+    var project: String? = nil
 }
 
 enum AgentSource: Equatable {
