@@ -22,6 +22,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         SystemMute.shared.releaseNow()
         // The GOWA gateway Coucou started never outlives it.
         WhatsAppGOWAProcess.shared.stopNow()
+        // The deck never keeps a stale Allow / Deny on its keys after Coucou quits.
+        DeckService.shared.shutdown()
         #endif
         DemoEngine.shared.stop()
         HotKeyCenter.shared.unregisterAll()
@@ -67,6 +69,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if !APPSTORE
         // Coucou for Android (off unless the user turned it on in Settings)
         AndroidLinkService.shared.startIfEnabled()
+        // Stream deck (off unless the user turned it on in Settings)
+        DeckService.shared.startIfEnabled()
         #endif
     }
 

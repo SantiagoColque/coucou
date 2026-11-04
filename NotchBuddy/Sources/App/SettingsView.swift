@@ -579,6 +579,8 @@ struct SettingsView: View {
         #if !APPSTORE
         AndroidLinkSettingsBox()
             .settingsAnchor("general.android")
+        DeckSettingsBox()
+            .settingsAnchor("general.deck")
         #endif
     }
 
