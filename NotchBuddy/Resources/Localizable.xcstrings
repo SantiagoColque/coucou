@@ -101394,7 +101394,7 @@
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "سماح"
+            "value" : "السماح"
           }
         },
         "bn" : {
@@ -101406,7 +101406,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erlauben"
+            "value" : "Zulassen"
           }
         },
         "en" : {
@@ -101495,13 +101495,13 @@
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "دائمًا"
+            "value" : "دائماً"
           }
         },
         "bn" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "সবসময়"
+            "value" : "সর্বদা"
           }
         },
         "de" : {
@@ -101543,7 +101543,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "常に"
+            "value" : "常に許可"
           }
         },
         "ko" : {
@@ -101579,13 +101579,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "始终"
+            "value" : "始终允许"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "一律"
+            "value" : "一律允許"
           }
         }
       }
@@ -101632,7 +101632,7 @@
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "मना करें"
+            "value" : "अस्वीकार"
           }
         },
         "id" : {
@@ -101662,7 +101662,7 @@
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Запретить"
+            "value" : "Отклонить"
           }
         },
         "th" : {
@@ -102006,13 +102006,13 @@
         "bn" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "বলতে চেপে ধরুন"
+            "value" : "ডিক্টেট করতে চেপে ধরুন"
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Halten zum Diktieren"
+            "value" : "Zum Diktieren gedrückt halten"
           }
         },
         "en" : {
@@ -102024,7 +102024,7 @@
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mantené para dictar"
+            "value" : "Mantener para dictar"
           }
         },
         "fr" : {
@@ -102036,7 +102036,7 @@
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "बोलने के लिए दबाए रखें"
+            "value" : "डिक्टेट करने के लिए दबाए रखें"
           }
         },
         "id" : {
@@ -102048,37 +102048,37 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "長押しで音声入力"
+            "value" : "押したまま口述"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "길게 눌러 받아쓰기"
+            "value" : "누르고 있는 동안 받아쓰기"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Segure para ditar"
+            "value" : "Segurar para ditar"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Удерживайте для диктовки"
+            "value" : "Удерживать для диктовки"
           }
         },
         "th" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "กดค้างเพื่อพูดพิมพ์"
+            "value" : "กดค้างเพื่อป้อนตามคำบอก"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dikte için basılı tutun"
+            "value" : "Dikte etmek için basılı tut"
           }
         },
         "zh-Hans" : {
@@ -102090,7 +102090,7 @@
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "按住聽寫"
+            "value" : "按住以聽寫"
           }
         }
       }
@@ -102101,97 +102101,97 @@
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "يستمع"
+            "value" : "أنا أستمع…"
           }
         },
         "bn" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "শুনছে"
+            "value" : "শুনছি…"
           }
         },
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hört zu"
+            "value" : "Hört zu…"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Listening"
+            "value" : "Listening…"
           }
         },
         "es" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Escuchando"
+            "value" : "Te escucho…"
           }
         },
         "fr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "J'écoute"
+            "value" : "Je t’écoute…"
           }
         },
         "hi" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "सुन रहा है"
+            "value" : "सुन रहा हूँ…"
           }
         },
         "id" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Mendengarkan"
+            "value" : "Mendengarkan…"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "聞き取り中"
+            "value" : "聞いています…"
           }
         },
         "ko" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "듣는 중"
+            "value" : "귀 기울이는 중…"
           }
         },
         "pt-BR" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ouvindo"
+            "value" : "Estou ouvindo…"
           }
         },
         "ru" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Слушаю"
+            "value" : "Слушаю…"
           }
         },
         "th" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "กำลังฟัง"
+            "value" : "กำลังฟัง…"
           }
         },
         "tr" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dinliyor"
+            "value" : "Dinleniyor…"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在听"
+            "value" : "我在听…"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "正在聆聽"
+            "value" : "聆聽中…"
           }
         }
       }
@@ -102505,7 +102505,7 @@
         "ar" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "الأسبوع"
+            "value" : "أسبوع"
           }
         },
         "bn" : {
@@ -102589,13 +102589,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "本周"
+            "value" : "一周"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "本週"
+            "value" : "每週"
           }
         }
       }

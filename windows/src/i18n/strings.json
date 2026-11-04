@@ -782,6 +782,21 @@
    "ko": "터미널 세션의 질문과 권한 요청에 노치에서 답하기",
    "ja": "ターミナルのセッションの質問と許可にノッチで答える"
   },
+  "Answer this plan on the Mac": {
+   "zh-Hans": "请在 Mac 上回答此计划",
+   "hi": "इस प्लान का जवाब Mac पर दें",
+   "es": "Respondé este plan en la Mac",
+   "ar": "أجب عن هذه الخطة على الـMac",
+   "fr": "Répondez à ce plan sur le Mac",
+   "bn": "এই প্ল্যানের উত্তর Mac-এ দিন",
+   "pt-BR": "Responda a este plano no Mac",
+   "ru": "Ответьте на этот план на Mac",
+   "id": "Jawab rencana ini di Mac",
+   "de": "Beantworte diesen Plan am Mac",
+   "tr": "Bu planı Mac'te yanıtlayın",
+   "ko": "이 계획은 Mac에서 응답하세요",
+   "ja": "このプランにはMacで回答してください"
+  },
   "Anthropic API": {
    "zh-Hans": "Anthropic API",
    "hi": "Anthropic API",
@@ -2672,6 +2687,21 @@
    "ko": "사용자 지정…",
    "ja": "カスタム…"
   },
+  "Deck connected": {
+   "zh-Hans": "控制台已连接",
+   "hi": "डेक जुड़ा है",
+   "es": "Deck conectada",
+   "ar": "اللوحة متصلة",
+   "fr": "Deck connecté",
+   "bn": "ডেক সংযুক্ত",
+   "pt-BR": "Deck conectado",
+   "ru": "Дек подключён",
+   "id": "Deck terhubung",
+   "de": "Deck verbunden",
+   "tr": "Deck bağlı",
+   "ko": "덱 연결됨",
+   "ja": "デッキ接続済み"
+  },
   "DeepSeek key saved.": {
    "zh-Hans": "DeepSeek 密钥已保存。",
    "hi": "DeepSeek कुंजी सहेजी गई।",
@@ -2926,6 +2956,21 @@
    "tr": "Dikte dili",
    "ko": "받아쓰기 언어",
    "ja": "口述の言語"
+  },
+  "Dictation off": {
+   "zh-Hans": "听写已关闭",
+   "hi": "डिक्टेशन बंद",
+   "es": "Dictado apagado",
+   "ar": "الإملاء متوقف",
+   "fr": "Dictée désactivée",
+   "bn": "ডিক্টেশন বন্ধ",
+   "pt-BR": "Ditado desativado",
+   "ru": "Диктовка выкл.",
+   "id": "Dikte mati",
+   "de": "Diktat aus",
+   "tr": "Dikte kapalı",
+   "ko": "받아쓰기 꺼짐",
+   "ja": "音声入力オフ"
   },
   "Dictations": {
    "zh-Hans": "听写次数",
@@ -6167,6 +6212,21 @@
    "ko": "열려 있는 다른 앱이 없어요",
    "ja": "ほかに開いているアプリはありません"
   },
+  "No plan data yet": {
+   "zh-Hans": "暂无套餐数据",
+   "hi": "अभी प्लान डेटा नहीं",
+   "es": "Sin datos del plan",
+   "ar": "لا بيانات للخطة بعد",
+   "fr": "Pas encore de données",
+   "bn": "এখনও প্ল্যানের তথ্য নেই",
+   "pt-BR": "Sem dados do plano",
+   "ru": "Нет данных тарифа",
+   "id": "Belum ada data paket",
+   "de": "Noch keine Plandaten",
+   "tr": "Henüz plan verisi yok",
+   "ko": "요금제 데이터 없음",
+   "ja": "プランのデータなし"
+  },
   "No rules yet. Example: if the sender contains “newsletter”, move to Junk.": {
    "zh-Hans": "还没有规则。例如：发件人包含“newsletter”时，移到垃圾邮件。",
    "hi": "अभी कोई नियम नहीं। उदाहरण: अगर प्रेषक में “newsletter” हो, तो जंक में भेजें।",
@@ -6181,6 +6241,21 @@
    "tr": "Henüz kural yok. Örnek: gönderen “newsletter” içeriyorsa gereksize taşı.",
    "ko": "아직 규칙이 없습니다. 예: 보낸 사람에 ‘newsletter’가 있으면 정크로 이동.",
    "ja": "ルールはまだありません。例：差出人に「newsletter」を含む場合、迷惑メールへ移動。"
+  },
+  "No sessions": {
+   "zh-Hans": "没有会话",
+   "hi": "कोई सेशन नहीं",
+   "es": "Sin sesiones",
+   "ar": "لا جلسات",
+   "fr": "Aucune session",
+   "bn": "কোনো সেশন নেই",
+   "pt-BR": "Nenhuma sessão",
+   "ru": "Нет сессий",
+   "id": "Tidak ada sesi",
+   "de": "Keine Sitzungen",
+   "tr": "Oturum yok",
+   "ko": "세션 없음",
+   "ja": "セッションなし"
   },
   "No setting found": {
    "zh-Hans": "未找到设置",
@@ -6631,6 +6706,21 @@
    "tr": "Burada bir şey yok",
    "ko": "텅 비었어요",
    "ja": "何もありません"
+  },
+  "Nothing playing": {
+   "zh-Hans": "未在播放",
+   "hi": "कुछ नहीं चल रहा",
+   "es": "Sin música",
+   "ar": "لا شيء قيد التشغيل",
+   "fr": "Rien en lecture",
+   "bn": "কিছু বাজছে না",
+   "pt-BR": "Nada tocando",
+   "ru": "Ничего не играет",
+   "id": "Tidak ada yang diputar",
+   "de": "Nichts wird gespielt",
+   "tr": "Çalan bir şey yok",
+   "ko": "재생 중인 항목 없음",
+   "ja": "再生していません"
   },
   "Nothing running right now.": {
    "zh-Hans": "当前没有任务。",
@@ -7712,6 +7802,21 @@
    "ko": "재생 중 · {title}",
    "ja": "再生中 · {title}"
   },
+  "Plug in the deck": {
+   "zh-Hans": "请插入控制台",
+   "hi": "डेक लगाएं",
+   "es": "Enchufá la deck",
+   "ar": "وصّل اللوحة",
+   "fr": "Branchez le deck",
+   "bn": "ডেক লাগান",
+   "pt-BR": "Conecte o deck",
+   "ru": "Подключите дек",
+   "id": "Colokkan deck",
+   "de": "Deck anschließen",
+   "tr": "Deck'i takın",
+   "ko": "덱을 연결하세요",
+   "ja": "デッキを接続してください"
+  },
   "Plugin installed — restart Amp to activate it": {
    "zh-Hans": "插件已安装 — 重启 Amp 以激活",
    "hi": "प्लगइन इंस्टॉल हो गया — सक्रिय करने के लिए Amp रीस्टार्ट करें",
@@ -8071,6 +8176,36 @@
    "tr": "Görüşme kaydet",
    "ko": "통화 녹음",
    "ja": "通話を録音"
+  },
+  "Record call": {
+   "zh-Hans": "录制通话",
+   "hi": "कॉल रिकॉर्ड करें",
+   "es": "Grabar llamada",
+   "ar": "تسجيل المكالمة",
+   "fr": "Enregistrer l'appel",
+   "bn": "কল রেকর্ড করুন",
+   "pt-BR": "Gravar chamada",
+   "ru": "Записать звонок",
+   "id": "Rekam panggilan",
+   "de": "Anruf aufnehmen",
+   "tr": "Görüşmeyi kaydet",
+   "ko": "통화 녹음",
+   "ja": "通話を録音"
+  },
+  "Recording": {
+   "zh-Hans": "正在录制",
+   "hi": "रिकॉर्ड हो रहा है",
+   "es": "Grabando",
+   "ar": "جارٍ التسجيل",
+   "fr": "Enregistrement",
+   "bn": "রেকর্ড হচ্ছে",
+   "pt-BR": "Gravando",
+   "ru": "Идёт запись",
+   "id": "Merekam",
+   "de": "Aufnahme läuft",
+   "tr": "Kaydediliyor",
+   "ko": "녹음 중",
+   "ja": "録音中"
   },
   "Recording…": {
    "zh-Hans": "正在录制…",
@@ -9632,6 +9767,21 @@
    "ko": "Mac에만 저장되고 밖으로는 하나도 안 나가요. 12주 동안 보관해요.",
    "ja": "Mac 上にローカル保存されます。何も Mac の外に出ません。12 週間保持されます。"
   },
+  "Stream deck": {
+   "zh-Hans": "直播控制台",
+   "hi": "स्ट्रीम डेक",
+   "es": "Stream deck",
+   "ar": "لوحة التحكم",
+   "fr": "Stream deck",
+   "bn": "স্ট্রিম ডেক",
+   "pt-BR": "Stream deck",
+   "ru": "Стрим-дек",
+   "id": "Stream deck",
+   "de": "Stream Deck",
+   "tr": "Stream deck",
+   "ko": "스트림 덱",
+   "ja": "ストリームデッキ"
+  },
   "Stripe, GitHub, Vercel, n8n, Notion and the rest.": {
    "zh-Hans": "Stripe、GitHub、Vercel、n8n、Notion 等。",
    "hi": "Stripe, GitHub, Vercel, n8n, Notion और बाकी।",
@@ -9871,6 +10021,21 @@
    "tr": "Yeni sürüm çıkınca bana haber ver",
    "ko": "새 버전이 나오면 알려 주기",
    "ja": "新しいバージョンが出たら知らせる"
+  },
+  "Terminal": {
+   "zh-Hans": "终端",
+   "hi": "टर्मिनल",
+   "es": "Terminal",
+   "ar": "الطرفية",
+   "fr": "Terminal",
+   "bn": "টার্মিনাল",
+   "pt-BR": "Terminal",
+   "ru": "Терминал",
+   "id": "Terminal",
+   "de": "Terminal",
+   "tr": "Terminal",
+   "ko": "터미널",
+   "ja": "ターミナル"
   },
   "Test sent to {0}": {
    "zh-Hans": "测试已发送到 {0}",
@@ -10786,6 +10951,21 @@
    "tr": "{name} yükleniyor",
    "ko": "{name} 업로드 중",
    "ja": "{name} をアップロード中"
+  },
+  "Use my stream deck (Redragon SS552, Mirabox N4)": {
+   "zh-Hans": "使用我的直播控制台（Redragon SS552、Mirabox N4）",
+   "hi": "मेरा स्ट्रीम डेक इस्तेमाल करें (Redragon SS552, Mirabox N4)",
+   "es": "Usar mi stream deck (Redragon SS552, Mirabox N4)",
+   "ar": "استخدام لوحة التحكم الخاصة بي (Redragon SS552، Mirabox N4)",
+   "fr": "Utiliser mon stream deck (Redragon SS552, Mirabox N4)",
+   "bn": "আমার স্ট্রিম ডেক ব্যবহার করুন (Redragon SS552, Mirabox N4)",
+   "pt-BR": "Usar meu stream deck (Redragon SS552, Mirabox N4)",
+   "ru": "Использовать мой стрим-дек (Redragon SS552, Mirabox N4)",
+   "id": "Gunakan stream deck saya (Redragon SS552, Mirabox N4)",
+   "de": "Mein Stream Deck verwenden (Redragon SS552, Mirabox N4)",
+   "tr": "Stream deck'imi kullan (Redragon SS552, Mirabox N4)",
+   "ko": "내 스트림 덱 사용 (Redragon SS552, Mirabox N4)",
+   "ja": "ストリームデッキを使う（Redragon SS552、Mirabox N4）"
   },
   "Use my subscription": {
    "zh-Hans": "使用我的订阅",
@@ -11716,6 +11896,21 @@
    "tr": "Mac'inin konuşma tanıma özelliği",
    "ko": "Mac의 음성 인식",
    "ja": "Mac の音声認識"
+  },
+  "Your agents on the keys, permissions and questions to answer with one key, plan usage, the selected session, music and Mochi on the touch strip. Quit any other deck app first (OpenDeck, StreamDock): only one app can drive the deck.": {
+   "zh-Hans": "按键上显示你的代理，一键回答权限请求和问题；触摸条显示套餐用量、所选会话、音乐和 Mochi。请先退出其他控制台应用（OpenDeck、StreamDock）：同一时间只能有一个应用控制它。",
+   "hi": "कुंजियों पर आपके एजेंट, एक कुंजी से अनुमतियों और सवालों के जवाब, टच स्ट्रिप पर प्लान का उपयोग, चुना हुआ सेशन, संगीत और Mochi. पहले कोई भी दूसरा डेक ऐप (OpenDeck, StreamDock) बंद करें: डेक को एक समय में एक ही ऐप चला सकता है.",
+   "es": "Tus agentes en las teclas, permisos y preguntas para responder con una tecla, el uso del plan, la sesión elegida, la música y Mochi en la franja táctil. Cerrá antes cualquier otra app de la deck (OpenDeck, StreamDock): solo una app puede manejarla.",
+   "ar": "وكلاؤك على الأزرار، والأذونات والأسئلة تُجاب بزر واحد، واستخدام الخطة والجلسة المختارة والموسيقى وMochi على الشريط اللمسي. أغلق أولًا أي تطبيق آخر للوحة (OpenDeck وStreamDock): تطبيق واحد فقط يمكنه التحكم بها.",
+   "fr": "Vos agents sur les touches, les autorisations et les questions à répondre d'une touche, l'utilisation du forfait, la session choisie, la musique et Mochi sur la bande tactile. Quittez d'abord toute autre app de deck (OpenDeck, StreamDock) : une seule app peut piloter le deck.",
+   "bn": "কী-তে আপনার এজেন্ট, এক কী-তে অনুমতি ও প্রশ্নের উত্তর, টাচ স্ট্রিপে প্ল্যানের ব্যবহার, বেছে নেওয়া সেশন, গান আর Mochi। আগে অন্য যেকোনো ডেক অ্যাপ (OpenDeck, StreamDock) বন্ধ করুন: ডেক একবারে শুধু একটি অ্যাপ চালাতে পারে।",
+   "pt-BR": "Seus agentes nas teclas, permissões e perguntas para responder com uma tecla, o uso do plano, a sessão escolhida, a música e o Mochi na faixa sensível ao toque. Feche antes qualquer outro app do deck (OpenDeck, StreamDock): só um app pode controlá-lo.",
+   "ru": "Ваши агенты на клавишах, разрешения и вопросы — ответ одной клавишей, расход тарифа, выбранная сессия, музыка и Mochi на сенсорной полосе. Сначала закройте другие приложения для дека (OpenDeck, StreamDock): управлять им может только одно приложение.",
+   "id": "Agen Anda di tombol, izin dan pertanyaan dijawab dengan satu tombol, pemakaian paket, sesi terpilih, musik, dan Mochi di strip sentuh. Tutup dulu aplikasi deck lain (OpenDeck, StreamDock): hanya satu aplikasi yang bisa mengendalikan deck.",
+   "de": "Deine Agenten auf den Tasten, Berechtigungen und Fragen mit einer Taste beantworten, Plan-Nutzung, die gewählte Sitzung, Musik und Mochi auf der Touchleiste. Beende zuerst jede andere Deck-App (OpenDeck, StreamDock): Nur eine App kann das Deck steuern.",
+   "tr": "Tuşlarda ajanlarınız, tek tuşla yanıtlanan izinler ve sorular, plan kullanımı, seçili oturum, müzik ve dokunmatik şeritte Mochi. Önce diğer deck uygulamalarını kapatın (OpenDeck, StreamDock): deck'i yalnızca bir uygulama yönetebilir.",
+   "ko": "키에는 에이전트, 권한과 질문은 키 하나로 응답, 터치 스트립에는 요금제 사용량, 선택한 세션, 음악, Mochi. 먼저 다른 덱 앱(OpenDeck, StreamDock)을 종료하세요. 덱은 한 번에 하나의 앱만 제어할 수 있습니다.",
+   "ja": "キーにエージェント、許可や質問にはキー1つで回答、タッチストリップにプラン使用量・選択中のセッション・音楽・Mochi。先に他のデッキアプリ（OpenDeck、StreamDock）を終了してください。デッキを操作できるアプリは1つだけです。"
   },
   "Your answer…": {
    "zh-Hans": "您的答案…",
