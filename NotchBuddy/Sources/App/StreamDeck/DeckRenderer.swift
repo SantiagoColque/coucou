@@ -119,6 +119,8 @@ private struct DeckTileView: View {
             DeckRequestPanel(title: title, lines: lines)
         case .session(let s, let selected):
             DeckSessionKey(session: s, selected: selected)
+        case .resting(let slot, let tick, let awake):
+            DeckRestingKey(slot: slot, tick: tick, awake: awake)
         case .allow:
             DeckButtonKey(symbol: "checkmark", title: String(localized: "deck.allow"), color: deckGreen)
         case .always:
@@ -362,6 +364,40 @@ private struct DeckButtonKey: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(RoundedRectangle(cornerRadius: 16).fill(filled ? color : Color.white.opacity(0.06)))
         .padding(3)
+    }
+}
+
+/// A free session key: a Mochi asleep in a soft color of its own, a "z" drifting each minute.
+/// Pressed, he wakes up happy for a moment. Dim on purpose: it never competes with a session.
+private struct DeckRestingKey: View {
+    let slot: Int
+    let tick: Int
+    let awake: Bool
+
+    private static let colors = ["#7C9CF5", "#F59EB5", "#7FD1AE", "#F5C76E", "#B49CF5"]
+
+    var body: some View {
+        let color = Color(hex: Self.colors[slot % Self.colors.count])
+        // Each key on its own rhythm, so the row never moves in step.
+        let phase = (tick + slot * 2) % 3
+        ZStack {
+            Circle().fill(color.opacity(awake ? 0.55 : 0.16)).frame(width: 66, height: 66)
+            MochiStill(state: awake ? .finished : .sleeping, bodyHex: "#FFFFFF", showBadge: false,
+                       pose: awake ? .neutral : .idle(id: "rest\(slot)", tick: tick))
+                .frame(width: 70, height: 70)
+                .opacity(awake ? 1 : 0.45)
+            if awake {
+                Image(systemName: "heart.fill").font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Color(hex: "#F4505E"))
+                    .offset(x: 30, y: -32)
+            } else {
+                Text(verbatim: phase == 2 ? "zZ" : "z")
+                    .font(.system(size: phase == 0 ? 15 : 19, weight: .heavy, design: .rounded))
+                    .foregroundStyle(color.opacity(0.75))
+                    .offset(x: 28 + CGFloat(phase) * 3, y: -26 - CGFloat(phase) * 5)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 

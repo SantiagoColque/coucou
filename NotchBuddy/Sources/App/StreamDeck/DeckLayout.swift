@@ -10,7 +10,8 @@ import Foundation
 //   normal    pages, changed by swiping the strip; the bottom row is the same on every page:
 //             key 5 next meeting, key 6 the Mac's microphone, key 7 audio output, key 8 dictation (hold), key 9 record a call.
 //             Panel 4 is Mochi, the clock and the page dots on every page.
-//     agents  keys 0-4 live agent sessions (press: jump to its terminal)
+//     agents  keys 0-4 live agent sessions (press: jump to its terminal); a free key has a Mochi asleep,
+//             which a press wakes for a moment
 //             strip: weekly plan usage · selected session · music
 //     focus   keys 0-4 focus 25 · focus 50 · break 5 · screen capture · lock the screen
 //             strip: the timer across panels 1-3 while it runs, otherwise CPU · memory · battery
@@ -107,6 +108,10 @@ struct DeckSnapshot: Equatable, Sendable {
     var output: String?
     var timer: FocusTimer?
     var vitals: Vitals?
+    /// Changes every minute: the sleeping Mochis on free keys turn over.
+    var restTick = 0
+    /// The free key whose Mochi was just woken by a press.
+    var awakeSlot: Int?
     var overallState = "idle"
     var clock = ""
 }
@@ -122,6 +127,8 @@ enum DeckTile: Equatable, Sendable {
     case blank
     // keys
     case session(DeckSnapshot.Session, selected: Bool)
+    /// A free session key: a Mochi asleep, or `awake` for a moment after a press.
+    case resting(slot: Int, tick: Int, awake: Bool)
     case allow, always, deny
     case option(String)
     case openTerminal
@@ -151,6 +158,7 @@ enum DeckAction: Equatable, Sendable {
     case answerInTerminal(UUID)
     case jumpToRequest
     case jump(sessionId: String)
+    case poke(slot: Int)
     case dictationStart, dictationStop
     case toggleRecording
     case brightness(delta: Int)
@@ -281,6 +289,9 @@ enum DeckLayout {
             switch s.page {
             case .agents:
                 sessionKeys()
+                for i in min(s.sessions.count, maxSessionKeys)..<maxSessionKeys {
+                    t[.key(i)] = .resting(slot: i, tick: s.restTick, awake: s.awakeSlot == i)
+                }
                 t[.strip(0)] = .usage(week: s.planWeek, resets: s.planWeekResets)
                 t[.strip(1)] = .focus(s.sessions.indices.contains(sel) ? s.sessions[sel] : nil)
                 t[.strip(2)] = .music(s.music)
@@ -350,7 +361,7 @@ enum DeckLayout {
             case .normal:
                 if k < 5 {
                     switch s.page {
-                    case .agents: return jump(k, s)
+                    case .agents: return s.sessions.indices.contains(k) ? jump(k, s) : .poke(slot: k)
                     case .focus:
                         if k == captureKey { return .capture }
                         if k == lockKey { return .lockScreen }

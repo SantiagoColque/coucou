@@ -87,6 +87,8 @@ struct AgentTask: Identifiable, Equatable {
     var hostApp: String?     = nil  // bundle id of the terminal running a Claude Code session; nil = VS Code
     /// The sessions sharing this pill, for the open card; empty while one session (or none) is behind it.
     var sessionLines: [SessionLine] = []
+    /// The session the pill shows (its hook session id), for the stream deck's keys.
+    var sessionKey: String? = nil
 
     /// The client pill this task belongs to: its id, or for a session's own pill
     /// ("integration_claude#2") the pill of its client. Compare this, not `id`, to a pill ID.

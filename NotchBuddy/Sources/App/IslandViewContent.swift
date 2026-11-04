@@ -785,7 +785,16 @@ struct ErrorView: View {
 
 /// The app a session runs in (its terminal, or VS Code), else any known terminal.
 /// Only brings apps to the front, so the App Store build has it too.
+@MainActor
 private func openSessionApp(_ task: AgentTask?) {
+    #if !APPSTORE
+    // GitHub build: also the session's own window, tab or split pane (Accessibility).
+    if let task {
+        let project = task.sessionCwd.map { URL(fileURLWithPath: $0).lastPathComponent }
+        TerminalJump.jump(to: task, names: [task.name, project].compactMap { $0 })
+        return
+    }
+    #endif
     if !(task?.pill == "integration_claude" && ClaudeHost.activate(task?.hostApp)),
        !TerminalTarget.activate(sessionBundleId: task?.sessionBundleId) {
         NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))

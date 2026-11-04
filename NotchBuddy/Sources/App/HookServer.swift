@@ -242,6 +242,7 @@ final class HookServer: @unchecked Sendable {
             return
         }
         write(session, waiting: waiting[shown], client: pill, to: index)
+        if state.tasks[index].sessionKey != shown { state.tasks[index].sessionKey = shown }
         let lines = board.lines(pill: pill).map { line in
             SessionLine(id: line.session, title: line.value.title,
                         state: waiting[line.session] ?? line.value.state,
@@ -290,6 +291,7 @@ final class HookServer: @unchecked Sendable {
         }
         guard let index = state.tasks.firstIndex(where: { $0.id == id }) else { return }
         write(value, waiting: waiting, client: client.id, to: index)
+        if state.tasks[index].sessionKey != session { state.tasks[index].sessionKey = session }
     }
 
     /// A step as the open card lists it: a file edit reads "name +3 −1".
@@ -978,6 +980,12 @@ final class HookServer: @unchecked Sendable {
         switch view {
         case .approval, .question, .finished, .error, .confused: isAlert = true
         default: isAlert = false
+        }
+        // Settings → General → Alerts: this kind of alert may be kept off the island (it still
+        // shows on the pill, and on the stream deck).
+        if isAlert, !NotchAlerts.opens(view) {
+            if state.mode == .hidden { NotificationCenter.default.post(name: .hookReveal, object: nil) }
+            return
         }
         if state.mode == .expanded {
             // Approval and question always win; other alerts are blocked while a card is showing

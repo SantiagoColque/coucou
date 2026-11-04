@@ -60,6 +60,21 @@ final class SpotifyController: ObservableObject {
         AppState.shared.activeIntegrations.contains(Self.pillId)
     }
 
+    /// The stream deck shows what Spotify plays even without its pill (pills are capped at 4):
+    /// title, artist, playing or paused, read from Spotify itself. The artwork, which comes
+    /// from Spotify's servers, stays for the pill.
+    private var followsForDeck: Bool {
+        !isPillActive && DeckService.isEnabled
+    }
+
+    private var isFollowing: Bool { isPillActive || followsForDeck }
+
+    /// The stream deck was turned on: read what Spotify plays now (it only tells on a change).
+    func followForDeck() {
+        guard followsForDeck else { return }
+        refresh()
+    }
+
     private var automationGranted: Bool {
         UserDefaults.standard.bool(forKey: Self.grantedKey)
     }
@@ -141,7 +156,7 @@ final class SpotifyController: ObservableObject {
                 guard let self else { return }
                 let active = integrations.contains(Self.pillId)
                 defer { wasActive = active }
-                guard active else { self.clearState(); return }
+                guard active else { if !DeckService.isEnabled { self.clearState() }; return }
                 guard wasActive != true else { return }
                 if wasActive == false || self.automationGranted {
                     // The publisher fires before the property is set: read once it is
@@ -155,7 +170,7 @@ final class SpotifyController: ObservableObject {
 
     private func handleNotification(state: String?, trackId: String?, name: String?, artist: String?,
                                     album: String?, durationMs: Double?, position: Double?) {
-        guard isPillActive else { return }
+        guard isFollowing else { return }
         if state == "Stopped" { clearState(); return }
 
         if let trackId, !trackId.isEmpty {
@@ -175,6 +190,7 @@ final class SpotifyController: ObservableObject {
 
         // The notification carries no artwork, shuffle, repeat or volume: read them when we may,
         // otherwise find the artwork through Spotify's public oEmbed.
+        guard isPillActive else { return }
         if automationGranted {
             refresh()
         } else if let track, artwork == nil {
@@ -198,8 +214,8 @@ final class SpotifyController: ObservableObject {
             anchor(position(at: Date()))
         }
         isPlaying = playing
-        // Reveal only on transition from not-playing → playing
-        if playing && !wasPlaying {
+        // Reveal only on transition from not-playing → playing (the pill's, not the deck's)
+        if playing && !wasPlaying && isPillActive {
             NotificationCenter.default.post(name: .musicReveal, object: nil)
         }
     }
@@ -230,7 +246,7 @@ final class SpotifyController: ObservableObject {
     /// Reads track, position, shuffle, repeat, volume and artwork URL. Never launches Spotify.
     /// The first call is what makes macOS ask for Automation.
     func refresh() {
-        guard isPillActive, isRunning else { return }
+        guard isFollowing, isRunning else { return }
         Task {
             let result = await runAppleScript("""
                 tell application id "com.spotify.client"
@@ -270,7 +286,7 @@ final class SpotifyController: ObservableObject {
                 end tell
             """)
             guard case .success(let v) = result, let ps = v.first?.text else { return }
-            guard isPillActive else { return }
+            guard isFollowing else { return }
             if ps == "stopped" || v.count < 11 { clearState(); return }
 
             let artworkURL = v[10].text.isEmpty ? nil : v[10].text
@@ -288,7 +304,7 @@ final class SpotifyController: ObservableObject {
             shuffling = v[7].flag
             repeating = v[8].flag
             if pendingVolume == nil { volume = Int(v[9].number.rounded()) }
-            if artwork == nil { loadArtwork(for: newTrack) }
+            if artwork == nil, isPillActive { loadArtwork(for: newTrack) }
         }
     }
 

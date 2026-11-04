@@ -69,6 +69,7 @@ enum DeckProtocolTests {
         s.recordingAvailable = true
         var t = DeckLayout.tiles(s, selected: 1)
         check("5 session keys, the top row", t[.key(4)], .session(session("p4"), selected: false))
+        check("no resting key while sessions fill the row", t[.key(3)], .session(session("p3"), selected: false))
         check("key 5 is the meeting, not a session", t[.key(5)], .meeting(nil, access: .notAsked))
         check("selected session is marked", t[.key(1)], .session(session("p1"), selected: true))
         check("key 8 dictation", t[.key(8)], .dictation(.idle))
@@ -229,7 +230,13 @@ enum DeckProtocolTests {
         s.output = nil
         s.calendar = .notAsked
         s.sessions = []
-        check("no sessions: session key does nothing", DeckLayout.action(for: .keyDown(0), s, selected: 0, armed: false), nil)
+        check("no sessions: a free key wakes its Mochi", DeckLayout.action(for: .keyDown(0), s, selected: 0, armed: false), .poke(slot: 0))
+        check("no sessions: free keys rest", DeckLayout.tiles(s, selected: 0)[.key(4)], .resting(slot: 4, tick: 0, awake: false))
+        s.awakeSlot = 2
+        s.restTick = 7
+        check("the poked Mochi is awake", DeckLayout.tiles(s, selected: 0)[.key(2)], .resting(slot: 2, tick: 7, awake: true))
+        s.awakeSlot = nil
+        s.restTick = 0
         check("no sessions: knob 2 press does nothing", DeckLayout.action(for: .knobPress(1), s, selected: 0, armed: false), nil)
 
         print("DeckArmClock")

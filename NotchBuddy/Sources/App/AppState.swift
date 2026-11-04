@@ -776,6 +776,10 @@ final class AppState: ObservableObject {
         setFocus(id)
     }
 
+    /// How many pills can be on at once. The island shows 4 beside the main one and folds the
+    /// others into "+N" (SessionBoard.slots); this fork allows 8 (upstream: 4).
+    static let maxActivePills = 8
+
     func toggleIntegration(_ id: String) {
         guard id != mainPillId else { return }
         guard PillCatalog.available.contains(where: { $0.id == id }) else { return }
@@ -784,7 +788,7 @@ final class AppState: ObservableObject {
             tasks.removeAll { $0.id == id }
             if focusId == id { focusId = mainPillId }
         } else {
-            guard activeIntegrations.count < 4 else { return }
+            guard activeIntegrations.count < Self.maxActivePills else { return }
             activeIntegrations.insert(id)
             if let def = PillCatalog.available.first(where: { $0.id == id }),
                !tasks.contains(where: { $0.id == id }) {

@@ -645,6 +645,23 @@ final class IslandWindowController: NSWindowController {
         }
     }
 
+    private var alertCloseWork: DispatchWorkItem?
+
+    /// A finished task or an error opened by itself folds after its own delay (Settings → General →
+    /// Alerts), unless the pointer is on the island or something holds it open. Opened externally,
+    /// the island has no other close timer until the pointer has been in and out.
+    private func scheduleAlertClose(_ view: IslandView) {
+        alertCloseWork?.cancel()
+        guard let seconds = NotchAlerts.seconds(for: view) else { return }
+        let work = DispatchWorkItem { [weak self] in
+            guard let self, self.state.mode == .expanded, self.state.view == view,
+                  !self.wasInIsland, self.fsm.isHeldOpen?() != true else { return }
+            self.collapse()
+        }
+        alertCloseWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + seconds, execute: work)
+    }
+
     func expand(to view: IslandView) {
         state.view = view
         if state.mode == .expanded {
@@ -910,6 +927,7 @@ final class IslandWindowController: NSWindowController {
             guard let self, let view = note.object as? IslandView else { return }
             self.fsm.openedExternally()
             self.expand(to: view)
+            self.scheduleAlertClose(view)
         }
 
         // Hook server compact reveal (non-alert work events: session start, tool use, etc.)

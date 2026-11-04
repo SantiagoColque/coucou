@@ -44,6 +44,9 @@ final class DeckService: ObservableObject {
     private var lastVitals: DeckSnapshot.Vitals?
     private var vitalsTimer: Timer?
     private var audioListening = false
+    /// The free key whose sleeping Mochi a press woke, and the nap that follows.
+    private var awakeSlot: Int?
+    private var napWork: DispatchWorkItem?
     private var armClock = DeckArmClock()
     private var screensOn = true
     private var brightness: Int {
@@ -80,6 +83,7 @@ final class DeckService: ObservableObject {
         device.onWriteFailed = { [weak self] in self?.drawn = [:] }
         device.start()
         observe()
+        SpotifyController.shared.followForDeck()
     }
 
     /// At quit: clears the deck without touching the saved switch.
@@ -160,9 +164,66 @@ final class DeckService: ObservableObject {
 
     private static let noAlways: Set<String> = ["agent_codex", "agent_copilot", "agent_muse"]
 
-    /// A key for one session among several behind a pill: "<pill>|<session>".
-    private static let sessionSeparator = "|"
-    private static func sessionKey(_ task: String, _ session: String) -> String { task + sessionSeparator + session }
+    /// A session's key on the deck: its hook session id, stable across launches and when it pops
+    /// in or out of a shared pill; the pill's id for an agent without one.
+    private static func deckId(session: String?, task: AgentTask) -> String {
+        session.map { "s:" + $0 } ?? task.id
+    }
+
+    /// The task a deck session belongs to.
+    private static func task(for deckId: String, in tasks: [AgentTask]) -> AgentTask? {
+        if deckId.hasPrefix("s:") {
+            let key = String(deckId.dropFirst(2))
+            return tasks.first { $0.sessionKey == key } ?? tasks.first { $0.sessionLines.contains { $0.id == key } }
+        }
+        return tasks.first { $0.id == deckId }
+    }
+
+    // MARK: Session order
+
+    private static let orderKey = "streamDeckSessionOrder"
+    private static let spotsKey = "streamDeckSessionSpots"
+    /// Every session keeps its key: the order they were first seen, corrected by where their
+    /// windows or panes were found on screen when jumping to them.
+    private lazy var sessionOrder: [String] = UserDefaults.standard.stringArray(forKey: Self.orderKey) ?? []
+    private lazy var sessionSpots: [String: CGPoint] = {
+        let raw = UserDefaults.standard.dictionary(forKey: Self.spotsKey) as? [String: [Double]] ?? [:]
+        return raw.compactMapValues { $0.count == 2 ? CGPoint(x: $0[0], y: $0[1]) : nil }
+    }()
+
+    private func ordered(_ sessions: [DeckSnapshot.Session]) -> [DeckSnapshot.Session] {
+        let new = sessions.map(\.id).filter { !sessionOrder.contains($0) }
+        if !new.isEmpty {
+            sessionOrder += new
+            // Sessions long gone drop off the front.
+            let live = Set(sessions.map(\.id))
+            while sessionOrder.count > 40, let i = sessionOrder.firstIndex(where: { !live.contains($0) }) {
+                sessionSpots[sessionOrder[i]] = nil
+                sessionOrder.remove(at: i)
+            }
+            saveOrder()
+        }
+        return sessions.sorted { (sessionOrder.firstIndex(of: $0.id) ?? .max) < (sessionOrder.firstIndex(of: $1.id) ?? .max) }
+    }
+
+    /// `id` was found at `spot`: the live sessions whose place is known swap among their own keys
+    /// so they read left to right (then top to bottom) as on screen. The others keep theirs.
+    private func learn(_ id: String, at spot: CGPoint, live: [String]) {
+        sessionSpots[id] = spot
+        let known = sessionOrder.indices.filter { live.contains(sessionOrder[$0]) && sessionSpots[sessionOrder[$0]] != nil }
+        let sorted = known.map { sessionOrder[$0] }.sorted {
+            let a = sessionSpots[$0]!, b = sessionSpots[$1]!
+            return abs(a.x - b.x) > 40 ? a.x < b.x : a.y < b.y
+        }
+        for (slot, session) in zip(known, sorted) { sessionOrder[slot] = session }
+        saveOrder()
+        redraw()
+    }
+
+    private func saveOrder() {
+        UserDefaults.standard.set(sessionOrder, forKey: Self.orderKey)
+        UserDefaults.standard.set(sessionSpots.mapValues { [Double($0.x), Double($0.y)] }, forKey: Self.spotsKey)
+    }
 
     private func snapshot() -> DeckSnapshot {
         let app = AppState.shared
@@ -176,11 +237,11 @@ final class DeckService: ObservableObject {
                 let project = task.sessionCwd.map { URL(fileURLWithPath: $0).lastPathComponent }
                 if task.sessionLines.isEmpty {
                     let step = task.steps.indices.contains(task.stepIndex) ? task.steps[task.stepIndex] : (task.steps.last ?? "")
-                    sessions.append(.init(id: task.id, agent: task.name, project: project,
+                    sessions.append(.init(id: Self.deckId(session: task.sessionKey, task: task), agent: task.name, project: project,
                                           state: task.state.rawValue, step: step, color: task.color))
                 } else {
                     for line in task.sessionLines {
-                        sessions.append(.init(id: Self.sessionKey(task.id, line.id), agent: line.title,
+                        sessions.append(.init(id: Self.deckId(session: line.id, task: task), agent: line.title,
                                               project: line.project ?? project,
                                               state: line.state.rawValue, step: line.lastStep, color: task.color))
                     }
@@ -191,7 +252,7 @@ final class DeckService: ObservableObject {
             for i in sessions.indices where names.filter({ $0 == names[i] }).count > 1 && !sessions[i].agent.isEmpty {
                 sessions[i].project = sessions[i].agent
             }
-            s.sessions = sessions
+            s.sessions = ordered(sessions)
             if let a = app.pendingApproval, a.sessionId != "demo_session" {
                 s.approval = .init(id: a.id, tool: a.tool, command: a.command, project: a.projectName,
                                    allowsAlways: !Self.noAlways.contains(PillCatalog.basePillId(a.pillId)),
@@ -240,6 +301,8 @@ final class DeckService: ObservableObject {
             s.timer = .init(remaining: max(0, Int(end.timeIntervalSinceNow.rounded(.up))), total: focusTotal, isBreak: focusIsBreak)
         }
         s.vitals = lastVitals
+        s.restTick = Int(Date().timeIntervalSince1970 / 60)
+        s.awakeSlot = awakeSlot
         s.overallState = app.effectiveState.rawValue
         s.clock = clockFormat.string(from: Date())
         return s
@@ -328,9 +391,26 @@ final class DeckService: ObservableObject {
         case .jumpToRequest:
             (NSApp.delegate as? AppDelegate)?.islandController?.handleHotKey(.jumpToTerminal)
         case .jump(let sessionId):
-            let session = snapshot().sessions.first { $0.id == sessionId }
-            jump(to: app.tasks.first { $0.id == sessionId || sessionId.hasPrefix($0.id + Self.sessionSeparator) },
-                 names: [session?.agent, session?.project].compactMap { $0 })
+            let sessions = snapshot().sessions
+            guard let task = Self.task(for: sessionId, in: app.tasks) else { return }
+            let session = sessions.first { $0.id == sessionId }
+            TerminalJump.jump(to: task, names: [session?.agent, session?.project].compactMap { $0 }) { [weak self] spot in
+                guard let self, let spot else { return }
+                self.learn(sessionId, at: spot, live: self.snapshot().sessions.map(\.id))
+            }
+        case .poke(let slot):
+            // A free key's Mochi wakes up happy for a moment, then goes back to sleep.
+            awakeSlot = slot
+            SoundEngine.shared.play("love")
+            napWork?.cancel()
+            let nap = DispatchWorkItem { [weak self] in
+                guard let self else { return }
+                self.awakeSlot = nil
+                self.redraw()
+            }
+            napWork = nap
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5, execute: nap)
+            redraw()
         case .dictationStart:
             FlowDictation.shared.startHandsFree()
         case .dictationStop:
@@ -443,31 +523,6 @@ final class DeckService: ObservableObject {
         }
         RunLoop.main.add(timer, forMode: .common)
         vitalsTimer = timer
-    }
-
-    /// Same routing as the island's "Open terminal" (IslandViewContent).
-    /// `names`: the session's conversation title and project, to find its own window or tab.
-    private func jump(to task: AgentTask?, names: [String]) {
-        guard let task else { return }
-        if !(task.pill == "integration_claude" && ClaudeHost.activate(task.hostApp)),
-           !TerminalTarget.activate(sessionBundleId: task.sessionBundleId) {
-            NSWorkspace.shared.open(URL(fileURLWithPath: "/System/Applications/Utilities/Terminal.app"))
-            return
-        }
-        // Then, once the terminal is in front (activating it brings its own front window), its
-        // window or tab for this session: raised before, it would be covered again.
-        let apps = NSWorkspace.shared.runningApplications
-        guard let terminal = [task.hostApp, task.sessionBundleId].compactMap({ $0 }).lazy
-            .compactMap({ id in apps.first { $0.bundleIdentifier == id } }).first else { return }
-        DeckWindowFocus.front(pid: terminal.processIdentifier)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            MainActor.assumeIsolated {
-                // The conversation's title first; the project only when no title matches.
-                let found = names.contains { DeckWindowFocus.focus(pid: terminal.processIdentifier, names: [$0]) }
-                DeckWindowFocus.front(pid: terminal.processIdentifier)
-                DeckDevice.log("jump: \(terminal.bundleIdentifier ?? "?") \(found ? "window found" : "no window matched")")
-            }
-        }
     }
 }
 

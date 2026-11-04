@@ -100,6 +100,8 @@ final class SettingsSearch: ObservableObject {
             e("general.demo", .general, "demo.groupbox.title"),
             e("general.sound", .general, "Sound", ["Enable sounds", "Volume", "Open sounds folder", "Reload sounds"]),
             e("general.behavior", .general, "Behavior", ["Open on hover", "Close after", "Hide after", "alerts.all-pills"]),
+            e("general.alerts", .general, "notch-alerts.title", ["notch-alerts.approval", "notch-alerts.question",
+                                                                 "notch-alerts.finished", "notch-alerts.error"]),
             e("general.display", .general, "Display", ["Show Mochi on", "Screen with the notch", "Main screen (menu bar)", "Follow the mouse",
                                                      "island.position", "island.position.top-left", "island.position.top-right",
                                                      "island.position.bottom-left", "island.position.bottom-right"]),
