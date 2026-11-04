@@ -160,6 +160,7 @@ enum DeckProtocolTests {
         check("knob 3 press play/pause", DeckLayout.action(for: .knobPress(2), s, selected: 0, armed: false), .musicPlayPause)
         check("music panel tap: next track", DeckLayout.action(for: .stripTap(2), s, selected: 0, armed: false), .musicNext)
         check("knob 1 brightness", DeckLayout.action(for: .knobTurn(knob: 0, steps: -1), s, selected: 0, armed: false), .brightness(delta: -10))
+        check("0x38 is a left-to-right swipe", DeckProtocol.parse(Array("ACK".utf8) + [0, 0, 0x4f, 0x4b, 0, 0, 0x38, 0]), .swipe(left: false))
         check("swipes are ignored", DeckLayout.action(for: .swipe(left: true), s, selected: 0, armed: false), nil)
         s.sessions = []
         check("no sessions: session key does nothing", DeckLayout.action(for: .keyDown(0), s, selected: 0, armed: false), nil)

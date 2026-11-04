@@ -190,7 +190,7 @@ enum DeckLayout {
 
         switch event {
         case .keyUp, .swipe:
-            return nil // swipes are unreliable on this hardware (opendeck-akp05); keys act on the way down
+            return nil // swipes have no function yet; keys act on the way down
 
         case .keyDown(let k):
             switch mode(s) {

@@ -87,6 +87,7 @@ enum DeckProtocol {
         case knobTurn(knob: Int, steps: Int)
         case knobPress(Int)
         case stripTap(Int)
+        /// left: the finger moved right to left.
         case swipe(left: Bool)
     }
 
@@ -106,15 +107,15 @@ enum DeckProtocol {
         case 0x91: return .knobTurn(knob: 2, steps: 1)
         case 0x70: return .knobTurn(knob: 3, steps: -1)
         case 0x71: return .knobTurn(knob: 3, steps: 1)
-        // shortcut: press vs touch codes are split as opendeck-akp05 lists them; 0x40/0x41 were seen on
-        // the SS552 but which gesture sent them is unconfirmed. Swap the two groups if taps and presses are crossed.
+        // Measured on an SS552: knob 1 press = 0x37, strip panel 1 tap = 0x40. Presses and taps arrive once,
+        // with no release (holding a knob sends nothing more), so neither supports long press.
         case 0x37: return .knobPress(0)
         case 0x35: return .knobPress(1)
         case 0x33: return .knobPress(2)
         case 0x36: return .knobPress(3)
         case 0x40...0x43: return .stripTap(Int(code - 0x40))
-        case 0x38: return .swipe(left: true)
-        case 0x39: return .swipe(left: false)
+        case 0x38: return .swipe(left: false) // measured: finger moving left to right
+        case 0x39: return .swipe(left: true)
         default: return nil
         }
     }

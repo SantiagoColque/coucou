@@ -51,9 +51,11 @@ Log: `StreamDeck.log` next to Coucou's other logs.
 
 1. `cd NotchBuddy && xcodegen` (picks up the new files), then `./scripts/dev-install.sh`.
 2. Quit any other deck app, plug in the deck, turn on Settings → General → Stream deck.
-3. Check every control once. The knob-press vs touch-strip codes come from opendeck-akp05 and are
-   not confirmed on the SS552: if pressing a knob acts like tapping the strip (or the reverse), swap
-   the two groups in `DeckProtocol.parse`. Unknown codes are written to `StreamDeck.log`.
+3. Check every control once. Unknown codes are written to `StreamDeck.log`.
+
+Measured on the SS552 (2026-11-04): a knob press (`0x37` for knob 1) and a strip tap (`0x40` for
+panel 1) are different codes. Both arrive once with no release, so knobs and strip have no long
+press; keys report press and release. Swipes: `0x38` left to right, `0x39` right to left.
 
 `tools/streamdeck/ss552_probe.py` (Linux, hidraw) paints every screen with its slot number and logs
 raw input codes, to map a new model of the family.
