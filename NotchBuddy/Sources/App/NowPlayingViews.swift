@@ -183,4 +183,43 @@ struct NowPlayingPressStyle: ButtonStyle {
             .animation(.spring(response: 0.2, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
+
+// MARK: - The song that just started, under the compact island
+
+/// Same capsule as the vitals line (VitalsHoverLine), which keeps its place while the pointer is on Mochi.
+struct NowPlayingToast: View {
+    let islandW: CGFloat
+    let islandH: CGFloat
+    @ObservedObject var state: AppState
+    @ObservedObject private var spotify = SpotifyController.shared
+    @ObservedObject private var vitals = MachineVitals.shared
+
+    var body: some View {
+        let track = state.mode == .compact && !vitals.hovered ? spotify.announced : nil
+        ZStack {
+            if let track {
+                HStack(spacing: 6) {
+                    Circle()
+                        .fill(Color(hex: SpotifyController.green))
+                        .frame(width: 6, height: 6)
+                    Text(verbatim: track.artist.isEmpty ? track.title : "\(track.title) · \(track.artist)")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(Color(hex: "#E1E3E6"))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 280)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(Color.black.opacity(0.92)))
+                .overlay(Capsule().stroke(Color.white.opacity(0.12), lineWidth: 1))
+                .id(track.id)
+                .transition(.opacity.combined(with: .offset(y: -4)))
+            }
+        }
+        .animation(.easeOut(duration: 0.18), value: track?.id)
+        .position(x: islandW / 2, y: islandH + 18)
+        .allowsHitTesting(false)
+    }
+}
 #endif

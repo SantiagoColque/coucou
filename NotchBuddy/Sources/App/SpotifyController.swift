@@ -44,6 +44,9 @@ final class SpotifyController: ObservableObject {
     @Published private(set) var volume: Int = 50
     @Published private(set) var artwork: NSImage?
     @Published private(set) var automationDenied = false
+    /// The song that just started, shown for a moment under the island (NowPlayingToast).
+    @Published private(set) var announced: SpotifyTrack?
+    private var announceTask: Task<Void, Never>?
 
     nonisolated private static let grantedKey = "coucou.spotifyAutomationGranted"
 
@@ -173,6 +176,7 @@ final class SpotifyController: ObservableObject {
         guard isFollowing else { return }
         if state == "Stopped" { clearState(); return }
 
+        let changed = trackId.map { !$0.isEmpty && $0 != track?.id } ?? false
         if let trackId, !trackId.isEmpty {
             let same = track?.id == trackId
             let newTrack = SpotifyTrack(
@@ -187,6 +191,7 @@ final class SpotifyController: ObservableObject {
         }
         if let position { anchor(position) }
         setPlaying(state == "Playing")
+        if changed, state == "Playing", let track { announce(track) }
 
         // The notification carries no artwork, shuffle, repeat or volume: read them when we may,
         // otherwise find the artwork through Spotify's public oEmbed.
@@ -217,6 +222,24 @@ final class SpotifyController: ObservableObject {
         // Reveal only on transition from not-playing → playing (the pill's, not the deck's)
         if playing && !wasPlaying && isPillActive {
             NotificationCenter.default.post(name: .musicReveal, object: nil)
+        }
+    }
+
+    /// A new song: its title and artist under the island for a few seconds, whichever pill is shown.
+    /// Not with the stream deck connected (its key already shows it), not for ads.
+    private func announce(_ track: SpotifyTrack) {
+        guard !track.isAd, !DeckService.shared.connected else {
+            appendAppLog("nb.log", "[Spotify] new song not shown: \(track.isAd ? "ad" : "stream deck connected")")
+            return
+        }
+        appendAppLog("nb.log", "[Spotify] new song shown (island \(AppState.shared.mode))")
+        announced = track
+        NotificationCenter.default.post(name: .musicReveal, object: nil)
+        announceTask?.cancel()
+        announceTask = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(4))
+            guard !Task.isCancelled else { return }
+            self?.announced = nil
         }
     }
 

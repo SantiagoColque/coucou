@@ -24,7 +24,6 @@ private enum GT {
 private let GC0     = CGPoint(x: 320, y: 90)
 private let GHB:    CGFloat = 58
 private let GASP:   CGFloat = 1.34
-private let GEAR_X: CGFloat = 40
 private let GEAR_HB:CGFloat = 17
 private let GCARD   = CGRect(x: 10, y: 36, width: 620, height: 104)
 private let GCARD_R:CGFloat = 20
@@ -96,7 +95,7 @@ private func greetPose(_ t: Double, compact: IslandRestingLayout) -> GreetPose {
     // Island size (reference for clip / warp spread)
     let gx = gSeg(t, 0, 0.5)
     let g  = sin(.pi*gx/2) + 0.04*sin(.pi*gx)*gx
-    let iw = gLerp(Double(compact.width - 160), 640, g)
+    let iw = gLerp(Double(compact.width - 2 * IslandRestingLayout.wing), 640, g)
     let ih = gLerp(Double(compact.height), 150, g)
 
     let GH = Double(GHB)   // 58
@@ -260,7 +259,7 @@ private func smallPose(_ compact: IslandRestingLayout) -> GreetPose {
     let sw = Double(compact.width)
     return GreetPose(
         hb: Double(GEAR_HB * compact.botDiameter / 20),
-        x: 320 - sw/2 + Double(GEAR_X),
+        x: 320 - sw/2 + Double(compact.botCenterX),
         y: Double(compact.botCenterY),
         sx: 1, sy: 1, tilt: 0,
         eye: .dot, open: 1, eyeRoll: 0,
@@ -645,7 +644,7 @@ struct GreetingCanvasView: View {
             Canvas { context, size in
                 context.withCGContext { cgCtx in
                     drawGreeting(cgCtx, size: size, t: t, tc: tc,
-                                 compact: IslandRestingLayout(width: state.notchWidth + 160,
+                                 compact: IslandRestingLayout(width: state.notchWidth + 2 * IslandRestingLayout.wing,
                                                               height: state.notchHeight))
                 }
             }

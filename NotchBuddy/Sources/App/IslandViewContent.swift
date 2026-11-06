@@ -4579,18 +4579,21 @@ struct MusicCardView: View {
                         Image(systemName: "backward.fill")
                             .font(.system(size: 11))
                             .foregroundColor(Color(hex: "#8E939C"))
+                            .hitArea(4)
                     }
                     .buttonStyle(.plain)
                     Button(action: { MusicController.shared.playPause() }) {
                         Image(systemName: appState.musicPlaying ? "pause.fill" : "play.fill")
                             .font(.system(size: 11))
                             .foregroundColor(Color(hex: "#FA2D48"))
+                            .hitArea(4)
                     }
                     .buttonStyle(.plain)
                     Button(action: { MusicController.shared.nextTrack() }) {
                         Image(systemName: "forward.fill")
                             .font(.system(size: 11))
                             .foregroundColor(Color(hex: "#8E939C"))
+                            .hitArea(4)
                     }
                     .buttonStyle(.plain)
                 }
@@ -5229,6 +5232,7 @@ struct IconButtonStyle: ButtonStyle {
             .frame(width: 28, height: 28)
             .background(Color.white.opacity(0.08))
             .clipShape(Circle())
+            .contentShape(Rectangle())
             .scaleEffect(configuration.isPressed ? 0.94 : 1)
     }
 }
@@ -5285,7 +5289,7 @@ struct SettingsIslandView: View {
                     Text("Sound")
                         .font(.system(size: 12.5))
                         .foregroundColor(Color(hex: "#C5C8CD"))
-                    Slider(value: $state.soundVolume, in: 0...0.2)
+                    Slider(value: $state.soundVolume, in: 0...1)
                         .frame(width: 72)
                         .opacity(state.soundEnabled ? 1 : 0.4)
                 }

@@ -45,7 +45,10 @@ enum IslandScreenGeometryTests {
             precondition(compact.botDiameter == min(20, height - 6))
             precondition(compact.botCenterY - compact.botDiameter / 2 >= 3)
             precondition(compact.botCenterY + compact.botDiameter / 2 <= height - 3)
-            precondition(compact.miniGridCenterX == 200)
+            precondition(compact.miniGridCenterX == 240 - IslandRestingLayout.wing / 2)
+            // Mochi and the mini grid (28 pt) fit inside their side of the island.
+            precondition(compact.botCenterX + compact.botDiameter / 2 <= IslandRestingLayout.wing)
+            precondition(14 * compact.miniGridScale <= IslandRestingLayout.wing / 2)
             precondition(compact.miniGridScale * 28 <= height - 4)
         }
         print("Island screen geometry and resting layout: 13 cases passed")

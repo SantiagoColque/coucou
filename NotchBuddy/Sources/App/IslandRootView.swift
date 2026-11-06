@@ -194,6 +194,9 @@ struct IslandContainer: View {
 
             // Under the island while the pointer is on Mochi: how the Mac is doing.
             VitalsHoverLine(islandW: islandWidth, islandH: islandHeight)
+            #if !APPSTORE
+            NowPlayingToast(islandW: islandWidth, islandH: islandHeight, state: state)
+            #endif
 
             if demoEngine.isActive {
                 Text(verbatim: "DEMO")
@@ -213,7 +216,7 @@ struct IslandContainer: View {
                 if state.mode == .compact && !state.islandPlacement.isCorner {
                     CompactMiniGrid(state: state)
                         .scaleEffect(IslandRestingLayout(width: islandWidth, height: islandHeight).miniGridScale)
-                        .position(x: islandWidth - 40, y: islandHeight / 2)
+                        .position(x: IslandRestingLayout(width: islandWidth, height: islandHeight).miniGridCenterX, y: islandHeight / 2)
                         .transition(.opacity)
                 }
             }
@@ -512,7 +515,7 @@ func botPosition(mode: IslandMode, view: IslandView, islandW: CGFloat, islandH: 
     case .hidden:
         return hasNotch ? (46, 16, 6, 0)
             : (islandW / 2, resting.botCenterY, resting.botDiameter, 1)
-    case .compact: return (40, resting.botCenterY, resting.botDiameter, 1)
+    case .compact: return (resting.botCenterX, resting.botCenterY, resting.botDiameter, 1)
     case .expanded:
         let layout = IslandConst.viewLayouts[view]!
         let diameter = layout.botDiameter
@@ -674,6 +677,14 @@ struct IslandContentView: View {
 
 // MARK: - Island header (tabs + icons)
 
+extension View {
+    /// A small icon takes clicks a little around it too (its transparent corners included),
+    /// without moving anything.
+    func hitArea(_ margin: CGFloat = 6) -> some View {
+        padding(margin).contentShape(Rectangle()).padding(-margin)
+    }
+}
+
 struct IslandHeader: View {
     @ObservedObject var state: AppState
     @State private var gearHovered  = false
@@ -722,6 +733,7 @@ struct IslandHeader: View {
                         Image(systemName: state.view == .settings ? "gearshape.fill" : "gearshape")
                             .font(.system(size: 14))
                             .foregroundColor(state.view == .settings || gearHovered ? Color(hex: "#F5F6F8") : Color(hex: "#8E939C"))
+                            .hitArea()
                     }
                     .buttonStyle(.plain)
                     .onHover { gearHovered = $0 }
@@ -730,6 +742,7 @@ struct IslandHeader: View {
                         Image(systemName: state.soundEnabled ? "speaker.wave.2" : "speaker.slash")
                             .font(.system(size: 14))
                             .foregroundColor(soundHovered ? Color(hex: "#F5F6F8") : Color(hex: "#8E939C"))
+                            .hitArea()
                     }
                     .buttonStyle(.plain)
                     .onHover { soundHovered = $0 }
@@ -742,6 +755,7 @@ struct IslandHeader: View {
                             Image(systemName: "xmark")
                                 .font(.system(size: 14))
                                 .foregroundColor(closeHovered ? Color(hex: "#F5F6F8") : Color(hex: "#8E939C"))
+                                .hitArea()
                         }
                         .buttonStyle(.plain)
                         .help(String(localized: "Close"))
@@ -783,6 +797,7 @@ struct TabButton: View {
                     isHovered ? Color.white.opacity(0.07) : Color.clear
                 )
                 .clipShape(Capsule())
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }

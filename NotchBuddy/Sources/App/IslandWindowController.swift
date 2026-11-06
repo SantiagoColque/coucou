@@ -14,6 +14,7 @@ final class IslandWindowController: NSWindowController {
     private var wasInIsland = false
     private var frameTimer: Timer?
     private var keyMonitor: Any?
+    private var outsideClickMonitor: Any?
     private var viewSubscription: AnyCancellable?
     private var displaySubscription: AnyCancellable?
     private var placementSubscription: AnyCancellable?
@@ -928,6 +929,17 @@ final class IslandWindowController: NSWindowController {
             self.fsm.openedExternally()
             self.expand(to: view)
             self.scheduleAlertClose(view)
+        }
+
+        // A click in another app folds the open island. Not an approval or a question (they wait
+        // for an answer) nor a voice exchange; collapse() also keeps what holds the island open.
+        outsideClickMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.state.mode == .expanded,
+                      self.state.view != .approval, self.state.view != .question,
+                      !AppState.shared.voiceActive else { return }
+                self.collapse()
+            }
         }
 
         // Hook server compact reveal (non-alert work events: session start, tool use, etc.)
@@ -2240,7 +2252,7 @@ func islandSize(mode: IslandMode, view: IslandView,
     switch mode {
     // In a corner, resting or compact: a square tile with Mochi alone.
     case .hidden:   return corner ? (IslandPlacement.tile, IslandPlacement.tile) : (nw, nh)
-    case .compact:  return corner ? (IslandPlacement.tile, IslandPlacement.tile) : (nw + 160, nh)
+    case .compact:  return corner ? (IslandPlacement.tile, IslandPlacement.tile) : (nw + 2 * IslandRestingLayout.wing, nh)
     case .expanded:
         if corner && view == .overview {
             let s = MailLayout.detailHeight != nil ? IslandPlacement.homeReadingSize : IslandPlacement.homeSize

@@ -58,6 +58,24 @@ enum WindowFocus {
         AXUIElementSetAttributeValue(AXUIElementCreateApplication(pid), kAXFrontmostAttribute as CFString, kCFBooleanTrue)
     }
 
+    /// Whether the app's front window shows the session titled `title`: a window, a selected native
+    /// tab or a split window all take the title of what is shown in front. nil when it can't tell
+    /// (no Accessibility, no title).
+    static func frontWindowShows(pid: pid_t, title: String) -> Bool? {
+        let wanted = [normalize(title)].filter { $0.count >= 3 }
+        guard AXIsProcessTrusted(), !wanted.isEmpty else { return nil }
+        let app = AXUIElementCreateApplication(pid)
+        // Asked from a hook event: a busy terminal must not hold it up.
+        AXUIElementSetMessagingTimeout(app, 0.25)
+        var value: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(app, kAXFocusedWindowAttribute as CFString, &value) == .success,
+              let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+        let window = value as! AXUIElement
+        AXUIElementSetMessagingTimeout(window, 0.25)
+        guard let shown = string(window, kAXTitleAttribute), !normalize(shown).isEmpty else { return nil }
+        return matches(shown, wanted)
+    }
+
     /// Returns where the session's window, tab or pane sits on screen; nil when none matched.
     @discardableResult
     static func focus(pid: pid_t, names: [String]) -> CGPoint? {

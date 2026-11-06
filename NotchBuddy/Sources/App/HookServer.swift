@@ -668,8 +668,20 @@ final class HookServer: @unchecked Sendable {
         // The user is looking at the session's terminal: a finish or an error is already in
         // front of them, so the pill only takes a badge (no sound, no reveal). Warp exposes
         // no active tab, so a sibling session in another tab of the same terminal is quiet too.
-        let terminalInFront = hostApp != nil
-            && NSWorkspace.shared.frontmostApplication?.bundleIdentifier == hostApp
+        // Asked only when a turn ends (it reads the terminal's front window).
+        func terminalInFront() -> Bool {
+            guard let hostApp, let front = NSWorkspace.shared.frontmostApplication,
+                  front.bundleIdentifier == hostApp else { return false }
+            #if !APPSTORE
+            // Another window, tab or split pane of that terminal is in front: the session is not
+            // on screen. Only with the conversation's title, which is what the terminal shows.
+            if let title = payload["session_title"] as? String, !title.isEmpty,
+               WindowFocus.frontWindowShows(pid: front.processIdentifier, title: title) == false {
+                return false
+            }
+            #endif
+            return true
+        }
         // Several sessions can share one pill (it is chosen from the client, not from the
         // session). The registry tells a turn-ending event whether it may touch the pill,
         // and which session owns the project name shown on it.
@@ -823,8 +835,9 @@ final class HookServer: @unchecked Sendable {
             if working > 0 { nbLog("Stop \(sessionId.prefix(8)) — \(working) other session(s) still working on \(agentId)") }
             syncPill(agentId)
             let finished = board.poppedPill(pill: agentId, session: key) ?? agentId
-            if !terminalInFront { SoundEngine.shared.play("finish") }
-            if !terminalInFront && showsAlert(for: finished, focused: state.focusId == finished) {
+            let inFront = terminalInFront()
+            if !inFront { SoundEngine.shared.play("finish") }
+            if !inFront && showsAlert(for: finished, focused: state.focusId == finished) {
                 expandIfNeeded(to: .finished)
             } else {
                 setPillBadge(id: finished, badge: .finished)
@@ -853,8 +866,9 @@ final class HookServer: @unchecked Sendable {
             }
             syncPill(agentId)
             let failed = board.poppedPill(pill: agentId, session: key) ?? agentId
-            if !terminalInFront { SoundEngine.shared.play("error") }
-            if !terminalInFront && showsAlert(for: failed, focused: state.focusId == failed) {
+            let inFront = terminalInFront()
+            if !inFront { SoundEngine.shared.play("error") }
+            if !inFront && showsAlert(for: failed, focused: state.focusId == failed) {
                 expandIfNeeded(to: .error)
             } else {
                 setPillBadge(id: failed, badge: .error)
