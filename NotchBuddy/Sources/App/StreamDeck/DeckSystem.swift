@@ -1,86 +1,14 @@
 import AppKit
 import CoreAudio
 import Darwin
-import EventKit
 import IOKit.ps
 
 // MARK: - What the deck reads from the Mac and changes on it
 //
-// The next meeting (the Mac's Calendar, read on the Mac only), the microphone and the audio output
-// (CoreAudio), CPU, memory and battery, and locking the screen. Everything is read when the deck
+// The microphone and the audio output (CoreAudio), CPU, memory and battery, and locking the screen. Everything is read when the deck
 // draws, never in the background: with the deck off, nothing here runs.
 
 #if !APPSTORE
-
-// MARK: Calendar
-
-@MainActor
-enum DeckCalendar {
-    private static let store = EKEventStore()
-
-    static var access: DeckSnapshot.CalendarAccess {
-        switch EKEventStore.authorizationStatus(for: .event) {
-        case .fullAccess: .granted
-        case .notDetermined: .notAsked
-        default: .denied
-        }
-    }
-
-    /// Asks once; after a refusal, opens the Calendars privacy pane where it can be turned on.
-    static func ask(then done: @escaping @MainActor () -> Void) {
-        guard access == .notAsked else {
-            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-                NSWorkspace.shared.open(url)
-            }
-            return
-        }
-        Task { @MainActor in
-            let ok = (try? await store.requestFullAccessToEvents()) ?? false
-            DeckDevice.log("calendar access \(ok ? "granted" : "refused")")
-            done()
-        }
-    }
-
-    /// The meeting on now or the next one today (all-day events and declined ones left out).
-    static func next(now: Date = Date()) -> EKEvent? {
-        guard access == .granted else { return nil }
-        guard let endOfDay = Calendar.current.date(bySettingHour: 23, minute: 59, second: 59, of: now) else { return nil }
-        let predicate = store.predicateForEvents(withStart: now.addingTimeInterval(-3 * 3600), end: endOfDay, calendars: nil)
-        return store.events(matching: predicate)
-            .filter { !$0.isAllDay && $0.endDate > now && !declined($0) }
-            .sorted { $0.startDate < $1.startDate }
-            .first
-    }
-
-    static func snapshot(_ event: EKEvent?, now: Date = Date()) -> DeckSnapshot.Meeting? {
-        guard let event else { return nil }
-        let f = DateFormatter()
-        f.dateFormat = "HH:mm"
-        let minutes = Int((event.startDate.timeIntervalSince(now) / 60).rounded(.up))
-        return .init(title: event.title ?? "", minutes: minutes, start: f.string(from: event.startDate),
-                     hasLink: link(event) != nil)
-    }
-
-    /// The video call link: Meet, Zoom, Teams, Webex, or the event's own URL.
-    static func link(_ event: EKEvent) -> URL? {
-        let hosts = ["meet.google.com", "zoom.us", "teams.microsoft.com", "teams.live.com", "webex.com", "whereby.com", "around.co"]
-        for text in [event.url?.absoluteString, event.location, event.notes].compactMap({ $0 }) {
-            guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { break }
-            for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
-                if let url = match.url, let host = url.host?.lowercased(),
-                   url.scheme == "https", hosts.contains(where: { host == $0 || host.hasSuffix("." + $0) }) {
-                    return url
-                }
-            }
-        }
-        if let url = event.url, url.scheme == "https" { return url }
-        return nil
-    }
-
-    private static func declined(_ event: EKEvent) -> Bool {
-        event.attendees?.contains { $0.isCurrentUser && $0.participantStatus == .declined } ?? false
-    }
-}
 
 // MARK: Audio
 

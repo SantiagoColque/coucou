@@ -70,7 +70,7 @@ enum DeckProtocolTests {
         var t = DeckLayout.tiles(s, selected: 1)
         check("5 session keys, the top row", t[.key(4)], .session(session("p4"), selected: false))
         check("no resting key while sessions fill the row", t[.key(3)], .session(session("p3"), selected: false))
-        check("key 5 is the meeting, not a session", t[.key(5)], .meeting(nil, access: .notAsked))
+        check("key 5 is the focus timer, not a session", t[.key(5)], .timerKey(nil))
         check("selected session is marked", t[.key(1)], .session(session("p1"), selected: true))
         check("key 8 dictation", t[.key(8)], .dictation(.idle))
         check("key 9 record", t[.key(9)], .record(on: false, ready: true))
@@ -181,11 +181,7 @@ enum DeckProtocolTests {
         check("swipe right to left: next page", DeckLayout.action(for: .swipe(left: true), s, selected: 0, armed: false), .page(delta: 1))
         check("swipe left to right: previous page", DeckLayout.action(for: .swipe(left: false), s, selected: 0, armed: false), .page(delta: -1))
         check("knob 4 turn does nothing without a timer", DeckLayout.action(for: .knobTurn(knob: 3, steps: 1), s, selected: 0, armed: false), nil)
-        check("meeting key asks for the calendar", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: false), .askCalendar)
-        s.calendar = .granted
-        check("meeting without a link does nothing", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: false), nil)
-        s.meeting = .init(title: "Daily", minutes: 3, start: "10:00", hasLink: true)
-        check("meeting key joins", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: false), .openMeeting)
+        check("timer key starts a 25 min focus", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: false), .startTimer(minutes: 25, isBreak: false))
         check("mic key without a microphone does nothing", DeckLayout.action(for: .keyDown(6), s, selected: 0, armed: false), nil)
         s.micMuted = false
         s.output = "MacBook Pro Speakers"
@@ -219,16 +215,20 @@ enum DeckProtocolTests {
         check("running preset stops", DeckLayout.action(for: .keyDown(0), s, selected: 0, armed: false), .stopTimer)
         check("knob 4 adjusts the timer", DeckLayout.action(for: .knobTurn(knob: 3, steps: -1), s, selected: 0, armed: false), .adjustTimer(minutes: -1))
         check("knob 4 press stops the timer", DeckLayout.action(for: .knobPress(3), s, selected: 0, armed: false), .stopTimer)
+        check("timer key shows the running timer", t[.key(5)], .timerKey(s.timer))
+        check("timer key stops it", DeckLayout.action(for: .keyDown(5), s, selected: 0, armed: false), .stopTimer)
+        s.page = .agents
+        check("the running timer shows on the agents page too", DeckLayout.tiles(s, selected: 0)[.key(5)], .timerKey(s.timer))
+        s.page = .focus
         s.approval = .init(id: request, tool: "Bash", command: "ls", project: "", allowsAlways: true, isPlan: false)
         check("request on the focus page: sessions on the top row", DeckLayout.tiles(s, selected: 0)[.key(0)], .session(session("p0"), selected: true))
         check("request on the focus page: session keys jump", DeckLayout.action(for: .keyDown(1), s, selected: 0, armed: false), .jump(sessionId: "p1"))
         s.approval = nil
         s.timer = nil
         s.page = .agents
-        s.meeting = nil
         s.micMuted = nil
         s.output = nil
-        s.calendar = .notAsked
+
         s.sessions = []
         check("no sessions: a free key wakes its Mochi", DeckLayout.action(for: .keyDown(0), s, selected: 0, armed: false), .poke(slot: 0))
         check("no sessions: free keys rest", DeckLayout.tiles(s, selected: 0)[.key(4)], .resting(slot: 4, tick: 0, awake: false))

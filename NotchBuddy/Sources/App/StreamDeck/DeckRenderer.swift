@@ -157,8 +157,8 @@ private struct DeckTileView: View {
                               title: on ? String(localized: "deck.recording") : String(localized: "deck.record"),
                               color: on ? deckRed : deckGrey, filled: on)
             }
-        case .meeting(let m, let access):
-            DeckMeetingKey(meeting: m, access: access)
+        case .timerKey(let t):
+            DeckTimerKey(timer: t)
         case .mic(let muted):
             DeckButtonKey(symbol: muted ? "mic.slash.fill" : "mic.fill",
                           title: muted ? String(localized: "deck.mic.off") : String(localized: "deck.mic.on"),
@@ -210,39 +210,41 @@ private func outputSymbol(_ name: String) -> String {
     return "speaker.wave.2.fill"
 }
 
-/// The next meeting: how soon, and its name. Orange from 5 minutes before until it ends.
-private struct DeckMeetingKey: View {
-    let meeting: DeckSnapshot.Meeting?
-    let access: DeckSnapshot.CalendarAccess
+/// The focus timer on the bottom row: "25 · Focus" to start one, else the time left in a ring.
+private struct DeckTimerKey: View {
+    let timer: DeckSnapshot.FocusTimer?
 
     var body: some View {
-        if access != .granted {
-            DeckButtonKey(symbol: "calendar", title: String(localized: "deck.meeting.calendar"), color: deckGrey, filled: false)
-        } else if let m = meeting {
-            let soon = m.minutes <= 5
-            VStack(spacing: 2) {
-                Text(when(m)).font(.system(size: 24, weight: .heavy, design: .rounded))
-                    .lineLimit(1).minimumScaleFactor(0.6)
-                Text(m.title).font(.system(size: 15, weight: .bold)).lineLimit(2).minimumScaleFactor(0.7)
-                    .multilineTextAlignment(.center)
-                if m.hasLink {
-                    Image(systemName: "video.fill").font(.system(size: 16, weight: .bold))
+        if let t = timer {
+            let color = t.isBreak ? deckGreen : deckOrange
+            let done = t.total > 0 ? 1 - Double(t.remaining) / Double(t.total) : 1
+            ZStack {
+                Circle().stroke(Color.white.opacity(0.15), lineWidth: 7)
+                Circle().trim(from: 0, to: done)
+                    .stroke(color, style: StrokeStyle(lineWidth: 7, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: -2) {
+                    Text(verbatim: String(format: "%d:%02d", t.remaining / 60, t.remaining % 60))
+                        .font(.system(size: 23, weight: .heavy, design: .rounded)).monospacedDigit()
+                        .foregroundStyle(.white).lineLimit(1).minimumScaleFactor(0.6)
+                    Text(t.isBreak ? String(localized: "deck.break") : String(localized: "deck.focus"))
+                        .font(.system(size: 12, weight: .bold)).foregroundStyle(color).lineLimit(1)
                 }
+                .padding(.horizontal, 10)
             }
-            .foregroundStyle(soon ? .white : deckOrange)
-            .padding(6)
+            .padding(9)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(RoundedRectangle(cornerRadius: 16).fill(soon ? deckOrange : Color.white.opacity(0.06)))
-            .padding(3)
         } else {
-            DeckButtonKey(symbol: "calendar", title: String(localized: "deck.meeting.none"), color: deckGrey, filled: false)
+            VStack(spacing: 0) {
+                Image(systemName: "timer").font(.system(size: 36, weight: .bold))
+                Text(verbatim: "\(DeckLayout.quickFocusMinutes)").font(.system(size: 22, weight: .heavy, design: .rounded))
+                Text(String(localized: "deck.focus")).font(.system(size: 14, weight: .bold)).lineLimit(1)
+            }
+            .foregroundStyle(deckOrange)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(RoundedRectangle(cornerRadius: 16).fill(Color.white.opacity(0.06)))
+            .padding(3)
         }
-    }
-
-    private func when(_ m: DeckSnapshot.Meeting) -> String {
-        if m.minutes <= 0 { return String(localized: "deck.meeting.now") }
-        if m.minutes <= 60 { return String(format: String(localized: "deck.minutes %lld"), Int64(m.minutes)) }
-        return m.start
     }
 }
 
@@ -312,12 +314,13 @@ private struct DeckVitalPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(label).font(.system(size: 18, weight: .heavy)).foregroundStyle(.white)
-                if charging { Image(systemName: "bolt.fill").font(.system(size: 15)).foregroundStyle(deckGreen) }
-                Spacer()
-                Text(verbatim: value.map { "\($0)%" } ?? "–").font(.system(size: 30, weight: .heavy, design: .rounded))
-                    .foregroundStyle(.white)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(label).font(.system(size: 15, weight: .heavy)).foregroundStyle(.white)
+                    .lineLimit(1).minimumScaleFactor(0.7)
+                if charging { Image(systemName: "bolt.fill").font(.system(size: 12)).foregroundStyle(deckGreen) }
+                Spacer(minLength: 2)
+                Text(verbatim: value.map { "\($0)%" } ?? "–").font(.system(size: 25, weight: .heavy, design: .rounded))
+                    .foregroundStyle(.white).lineLimit(1).fixedSize()
             }
             GeometryReader { geo in
                 ZStack(alignment: .leading) {

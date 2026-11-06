@@ -8,7 +8,8 @@ import Foundation
 //
 // Layout (10 keys, 5 per row, a 4-panel touch strip with a knob under each panel):
 //   normal    pages, changed by swiping the strip; the bottom row is the same on every page:
-//             key 5 next meeting, key 6 the Mac's microphone, key 7 audio output, key 8 dictation (hold), key 9 record a call.
+//             key 5 the focus timer (press: 25 min focus, or stop it), key 6 the Mac's microphone, key 7 audio output,
+//             key 8 dictation (hold), key 9 record a call.
 //             Panel 4 is Mochi, the clock and the page dots on every page.
 //     agents  keys 0-4 live agent sessions (press: jump to its terminal); a free key has a Mochi asleep,
 //             which a press wakes for a moment
@@ -63,17 +64,6 @@ struct DeckSnapshot: Equatable, Sendable {
 
     enum Dictation: Equatable, Sendable { case off, idle, listening, thinking }
 
-    struct Meeting: Equatable, Sendable {
-        var title: String
-        /// Minutes until it starts; 0 or less once it has started.
-        var minutes: Int
-        /// "15:30", shown when it is more than an hour away.
-        var start: String
-        var hasLink: Bool
-    }
-
-    enum CalendarAccess: Equatable, Sendable { case notAsked, denied, granted }
-
     struct FocusTimer: Equatable, Sendable {
         var remaining: Int   // seconds
         var total: Int       // seconds
@@ -100,8 +90,6 @@ struct DeckSnapshot: Equatable, Sendable {
     /// The transcription model the Notetaker needs is downloaded.
     var recordingReady = true
     var page: DeckPage = .agents
-    var meeting: Meeting?
-    var calendar: CalendarAccess = .notAsked
     /// nil: no microphone.
     var micMuted: Bool?
     /// The audio output's name; nil when there is none.
@@ -134,7 +122,8 @@ enum DeckTile: Equatable, Sendable {
     case openTerminal
     case dictation(DeckSnapshot.Dictation)
     case record(on: Bool, ready: Bool)
-    case meeting(DeckSnapshot.Meeting?, access: DeckSnapshot.CalendarAccess)
+    /// The focus timer on the bottom row, on every page: idle, or running.
+    case timerKey(DeckSnapshot.FocusTimer?)
     case mic(muted: Bool)
     case output(String)
     case focusPreset(minutes: Int, isBreak: Bool, active: Bool)
@@ -168,7 +157,6 @@ enum DeckAction: Equatable, Sendable {
     case volume(delta: Int)
     case openCoucou
     case page(delta: Int)
-    case openMeeting, askCalendar
     case toggleMic, nextOutput
     case startTimer(minutes: Int, isBreak: Bool)
     case stopTimer
@@ -181,7 +169,9 @@ enum DeckLayout {
     static let maxSessionKeys = 5
     /// Options of a question: every key but the terminal one's row neighbours.
     static let maxOptionKeys = 8
-    static let meetingKey = 5, micKey = 6, outputKey = 7
+    static let timerKey = 5, micKey = 6, outputKey = 7
+    /// What the timer key starts.
+    static let quickFocusMinutes = 25
     static let dictationKey = 8, recordKey = 9
     /// Focus page, top row.
     static let focusPresets: [(minutes: Int, isBreak: Bool)] = [(25, false), (50, false), (5, true)]
@@ -311,7 +301,7 @@ enum DeckLayout {
                     t[.strip(2)] = .vital(.battery, value: v?.battery, charging: v?.charging ?? false)
                 }
             }
-            t[.key(meetingKey)] = .meeting(s.meeting, access: s.calendar)
+            t[.key(timerKey)] = .timerKey(s.timer)
             if let muted = s.micMuted { t[.key(micKey)] = .mic(muted: muted) }
             if let output = s.output { t[.key(outputKey)] = .output(output) }
             t[.key(dictationKey)] = .dictation(s.dictation)
@@ -370,11 +360,8 @@ enum DeckLayout {
                         return active ? .stopTimer : .startTimer(minutes: p.minutes, isBreak: p.isBreak)
                     }
                 }
-                if k == meetingKey {
-                    switch s.calendar {
-                    case .notAsked, .denied: return .askCalendar
-                    case .granted: return s.meeting?.hasLink == true ? .openMeeting : nil
-                    }
+                if k == timerKey {
+                    return s.timer == nil ? .startTimer(minutes: quickFocusMinutes, isBreak: false) : .stopTimer
                 }
                 if k == micKey { return s.micMuted == nil ? nil : .toggleMic }
                 if k == outputKey { return s.output == nil ? nil : .nextOutput }

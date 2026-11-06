@@ -1,6 +1,5 @@
 import AppKit
 import Combine
-import EventKit
 import Foundation
 
 // MARK: - Stream deck: the bridge to the island (GitHub build)
@@ -145,7 +144,6 @@ final class DeckService: ObservableObject {
             FlowDictation.shared.$isEnabled.map { _ in () }.eraseToAnyPublisher(),
             FlowDictation.shared.pill.model.$phase.map { _ in () }.eraseToAnyPublisher(),
             Parakeet.shared.$state.map { _ in () }.eraseToAnyPublisher(),
-            NotificationCenter.default.publisher(for: .EKEventStoreChanged).map { _ in () }.eraseToAnyPublisher(),
         ]
         // @Published sends before the property changes: the debounce lets the value settle, and it is read back.
         Publishers.MergeMany(sources)
@@ -293,8 +291,6 @@ final class DeckService: ObservableObject {
         s.recording = NoteTaker.shared.isRecording
         s.recordingReady = Parakeet.shared.isReady
         s.page = page
-        s.calendar = DeckCalendar.access
-        s.meeting = DeckCalendar.snapshot(DeckCalendar.next())
         s.micMuted = DeckAudio.micMuted()
         s.output = DeckAudio.outputName()
         if let end = focusEnd {
@@ -444,12 +440,6 @@ final class DeckService: ObservableObject {
             page = DeckPage(rawValue: ((page.rawValue + delta) % count + count) % count) ?? .agents
             if page == .focus { lastVitals = vitals.sample() } // primes the CPU reading
             redraw()
-        case .openMeeting:
-            if let event = DeckCalendar.next(), let url = DeckCalendar.link(event) {
-                NSWorkspace.shared.open(url)
-            }
-        case .askCalendar:
-            DeckCalendar.ask { [weak self] in self?.redraw() }
         case .toggleMic:
             DeckAudio.toggleMic()
             redraw()
